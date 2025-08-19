@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>K-V-K Anonymous Chat</title>
+    <title>Enhanced Anonymous Chat</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
         * {
@@ -213,7 +213,7 @@
             border-left: 4px solid var(--primary-color);
         }
 
-        /* UPDATED: Green system messages */
+        /* GREEN system messages */
         .message.system {
             background: #e8f5e8;
             border-left-color: #4caf50;
@@ -400,7 +400,7 @@
     <div class="container">
         <div class="header">
             <div class="header-left">
-                <h1>🚀 Walkie Rooms</h1>
+                <h1>🚀 Enhanced Chat</h1>
                 <p id="userInfo">Welcome!</p>
             </div>
             <div class="header-controls">
@@ -509,6 +509,36 @@
         let currentRoom = null;
         let selectedRoomId = null;
         let roomToClose = null;
+
+        // NEW: Function to convert timestamps to "time ago" format
+        function getTimeAgo(timestamp) {
+            const now = new Date();
+            const then = new Date();
+            
+            // Parse timestamp (e.g., "7:16:26 AM")
+            const timeParts = timestamp.match(/(\d+):(\d+):(\d+) (AM|PM)/);
+            if (!timeParts) return timestamp; // fallback to original
+            
+            let hours = parseInt(timeParts[1], 10);
+            const minutes = parseInt(timeParts[12], 10);
+            const seconds = parseInt(timeParts[13], 10);
+            const ampm = timeParts[14];
+            
+            // Convert to 24-hour format
+            if (ampm === "PM" && hours !== 12) hours += 12;
+            if (ampm === "AM" && hours === 12) hours = 0;
+            
+            then.setHours(hours, minutes, seconds);
+            
+            let diffSeconds = Math.floor((now - then) / 1000);
+            if (diffSeconds < 0) diffSeconds += 24 * 3600; // Handle day rollover
+            
+            // Convert to human-readable format
+            if (diffSeconds < 60) return diffSeconds + "s ago";
+            else if (diffSeconds < 3600) return Math.floor(diffSeconds / 60) + "m ago";
+            else if (diffSeconds < 86400) return Math.floor(diffSeconds / 3600) + "h ago";
+            else return Math.floor(diffSeconds / 86400) + "d ago";
+        }
 
         // Theme management
         function toggleTheme() {
@@ -657,6 +687,7 @@
             }
         }
 
+        // UPDATED: Display message function with "time ago" feature
         function displayMessage(msg) {
             const messagesDiv = document.getElementById('messages');
             const messageDiv = document.createElement('div');
@@ -665,9 +696,11 @@
                 messageDiv.className = 'message system';
                 messageDiv.innerHTML = `<div class="message-text">${msg.text}</div>`;
             } else {
+                // Use getTimeAgo instead of raw timestamp
+                const timeAgo = getTimeAgo(msg.timestamp);
                 messageDiv.className = 'message';
                 messageDiv.innerHTML = `
-                    <div class="message-header">${msg.nickname} - ${msg.timestamp}</div>
+                    <div class="message-header">${msg.nickname} - ${timeAgo}</div>
                     <div class="message-text">${msg.text}</div>
                 `;
             }
