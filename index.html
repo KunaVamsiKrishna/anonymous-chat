@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Enhanced Anonymous Chat</title>
+    <title>K-V-K Anonymous Chat</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
         * {
@@ -128,6 +128,7 @@
             transform: translateY(0);
         }
 
+        /* Screens */
         .screen {
             display: none;
             padding: 30px;
@@ -212,6 +213,7 @@
             border-left: 4px solid var(--primary-color);
         }
 
+        /* UPDATED: Green system messages */
         .message.system {
             background: #e8f5e8;
             border-left-color: #4caf50;
@@ -239,6 +241,7 @@
             background: var(--container-bg);
         }
 
+        /* FIXED: Input field styling */
         input, select {
             padding: 12px;
             border: 2px solid var(--border-color);
@@ -254,12 +257,14 @@
             border-color: var(--primary-color);
         }
 
+        /* Specific fix for message input */
         #messageInput {
             background: var(--input-bg) !important;
             color: var(--text-color) !important;
             border: 2px solid var(--border-color) !important;
         }
 
+        /* Placeholder text styling */
         input::placeholder {
             color: rgba(128, 128, 128, 0.7);
         }
@@ -395,7 +400,7 @@
     <div class="container">
         <div class="header">
             <div class="header-left">
-                <h1>🚀 Enhanced Chat</h1>
+                <h1>🚀 Walkie Rooms</h1>
                 <p id="userInfo">Welcome!</p>
             </div>
             <div class="header-controls">
@@ -504,46 +509,6 @@
         let currentRoom = null;
         let selectedRoomId = null;
         let roomToClose = null;
-
-        // FIXED: Function to convert timestamps to "time ago" format with error handling
-        function getTimeAgo(timestamp) {
-            // Handle missing or invalid timestamp
-            if (!timestamp || typeof timestamp !== 'string') return "Just now";
-            
-            // Parse timestamp (e.g., "7:16:26 AM")
-            const timeParts = timestamp.match(/(\d+):(\d+):(\d+) (AM|PM)/);
-            if (!timeParts) return "Just now"; // fallback if can't parse
-            
-            let hours = parseInt(timeParts[1], 10);
-            const minutes = parseInt(timeParts[1], 10);
-            const seconds = parseInt(timeParts[2], 10);
-            const ampm = timeParts[3];
-            
-            // Validate parsed values
-            if (isNaN(hours) || isNaN(minutes) || isNaN(seconds)) return "Just now";
-            
-            // Convert to 24-hour format
-            if (ampm === "PM" && hours !== 12) hours += 12;
-            if (ampm === "AM" && hours === 12) hours = 0;
-            
-            const now = new Date();
-            const then = new Date();
-            then.setHours(hours, minutes, seconds);
-            
-            // Handle day rollover
-            if (then > now) {
-                then.setDate(then.getDate() - 1);
-            }
-            
-            let diffSeconds = Math.floor((now - then) / 1000);
-            
-            // Safety checks
-            if (diffSeconds < 0 || isNaN(diffSeconds)) return "Just now";
-            if (diffSeconds < 60) return diffSeconds + "s ago";
-            if (diffSeconds < 3600) return Math.floor(diffSeconds / 60) + "m ago";
-            if (diffSeconds < 86400) return Math.floor(diffSeconds / 3600) + "h ago";
-            return Math.floor(diffSeconds / 86400) + "d ago";
-        }
 
         // Theme management
         function toggleTheme() {
@@ -655,6 +620,7 @@
             socket.emit('joinRoom', { roomId, password: null });
         }
 
+        // FIXED: Leave room function - keep Create Room button visible
         function leaveRoom() {
             currentRoom = null;
             showScreen('roomsScreen');
@@ -673,6 +639,7 @@
             }
         }
 
+        // Close room from inside chat
         function closeRoom() {
             if (confirm('⚠️ WARNING: This will PERMANENTLY DELETE this room and kick out all users!\n\nAre you absolutely sure you want to close this room?')) {
                 socket.emit('closeRoom');
@@ -690,7 +657,6 @@
             }
         }
 
-        // FIXED: Display message function with safe timestamp handling
         function displayMessage(msg) {
             const messagesDiv = document.getElementById('messages');
             const messageDiv = document.createElement('div');
@@ -699,11 +665,9 @@
                 messageDiv.className = 'message system';
                 messageDiv.innerHTML = `<div class="message-text">${msg.text}</div>`;
             } else {
-                // Use getTimeAgo with safe error handling
-                const timeAgo = getTimeAgo(msg.timestamp);
                 messageDiv.className = 'message';
                 messageDiv.innerHTML = `
-                    <div class="message-header">${msg.nickname} - ${timeAgo}</div>
+                    <div class="message-header">${msg.nickname} - ${msg.timestamp}</div>
                     <div class="message-text">${msg.text}</div>
                 `;
             }
