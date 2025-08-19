@@ -67,7 +67,6 @@ function saveRooms() {
     }
 }
 
-// Initialize
 loadRooms();
 
 // Auto-cleanup empty rooms after 5 minutes
@@ -147,12 +146,11 @@ io.on('connection', (socket) => {
             lastActivity: Date.now()
         });
 
+        user.isOwner = true;
         saveRooms();
         io.emit('roomsList', getRoomsList());
         
-        // Auto-join the creator
-        socket.emit('joinRoom', { roomId: roomId, password: null });
-        console.log(`Room created: ${data.roomName}`);
+        console.log(`Room created: ${data.roomName} by ${user.nickname}`);
     });
 
     socket.on('joinRoom', (data) => {
@@ -231,16 +229,84 @@ io.on('connection', (socket) => {
         io.to(user.currentRoom).emit('message', message);
     });
 
-    socket.on('clearRoom', () => {
+    // NEW: Clear chat (only room owner)
+    socket.on('clearChat', (data) => {
         const user = users.get(socket.id);
         if (!user || !user.currentRoom) return;
         
         const room = rooms.get(user.currentRoom);
-        if (!room || room.owner !== socket.id) return;
+        if (!room) return;
         
+        // Check if user is room owner
+        if (room.owner !== socket.id) {
+            socket.emit('error', { message: 'Only room creator can clear chat!' });
+            return;
+        }
+        
+        // Verify password for private rooms
+        if (room.password && room.password !== data.password) {
+            socket.emit('error', { message: 'Incorrect password!' });
+            return;
+        }
+        
+        // Clear messages
         room.messages = [];
         saveRooms();
-        io.to(user.currentRoom).emit('roomCleared');
+        
+        // Notify all users in room
+        io.to(user.currentRoom).emit('chatCleared', { 
+            message: `Chat cleared by ${user.nickname}` 
+        });
+        
+        console.log(`Chat cleared in ${room.name} by ${user.nickname}`);
+    });
+
+    // NEW: Close room (only room owner)
+    socket.on('closeRoom', (data) => {
+        const user = users.get(socket.id);
+        if (!user || !user.currentRoom) return;
+        
+        const room = rooms.get(user.currentRoom);
+        if (!room) return;
+        
+        // Can't close public room
+        if (user.currentRoom === 'public') {
+            socket.emit('error', { message: 'Cannot close public room!' });
+            return;
+        }
+        
+        // Check if user is room owner
+        if (room.owner !== socket.id) {
+            socket.emit('error', { message: 'Only room creator can close the room!' });
+            return;
+        }
+        
+        // Verify password for private rooms
+        if (room.password && room.password !== data.password) {
+            socket.emit('error', { message: 'Incorrect password!' });
+            return;
+        }
+        
+        const roomName = room.name;
+        
+        // Notify all users in room before closing
+        io.to(user.currentRoom).emit('roomClosing', { 
+            message: `Room "${roomName}" is being closed by ${user.nickname}` 
+        });
+        
+        // Remove room after a short delay
+        setTimeout(() => {
+            rooms.delete(user.currentRoom);
+            saveRooms();
+            io.emit('roomsList', getRoomsList());
+            
+            // Kick out all users from the room
+            io.to(user.currentRoom).emit('roomClosed', { 
+                message: `Room "${roomName}" has been closed` 
+            });
+        }, 2000);
+        
+        console.log(`Room ${roomName} closed by ${user.nickname}`);
     });
 
     socket.on('disconnect', () => {
@@ -261,6 +327,15 @@ io.on('connection', (socket) => {
                 room.messages.push(leaveMessage);
                 io.to(user.currentRoom).emit('message', leaveMessage);
                 io.to(user.currentRoom).emit('userCountUpdate', room.users.size);
+                
+                // If owner leaves, delete the room (except public)
+                if (room.owner === socket.id && user.currentRoom !== 'public') {
+                    setTimeout(() => {
+                        rooms.delete(user.currentRoom);
+                        saveRooms();
+                        io.emit('roomsList', getRoomsList());
+                    }, 1000);
+                }
             }
         }
         
@@ -274,4 +349,5 @@ server.listen(PORT, () => {
     console.log(`🚀 Walkie Rooms running on port ${PORT}`);
     console.log(`🇮🇳 Using Indian Standard Time`);
     console.log(`🧹 Auto-cleanup: 5 minutes for empty rooms`);
+    console.log(`🔒 Owner controls: Close room & Clear chat with password`);
 });
