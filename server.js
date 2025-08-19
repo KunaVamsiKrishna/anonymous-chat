@@ -69,28 +69,53 @@ function saveRooms() {
 
 loadRooms();
 
-// Auto-cleanup empty rooms after 5 minutes
-const CLEANUP_INTERVAL = 5 * 60 * 1000;
-setInterval(() => {
+// FIXED: Auto-cleanup function
+const CLEANUP_INTERVAL = 5 * 60 * 1000; // 5 minutes
+function cleanupInactiveRooms() {
     const now = Date.now();
     const roomsToDelete = [];
+    let publicRoomCleared = false;
     
     rooms.forEach((room, roomId) => {
-        if (roomId !== 'public' && room.users.size === 0) {
-            const inactive = now - room.lastActivity;
-            if (inactive >= CLEANUP_INTERVAL) {
+        const timeSinceLastActivity = now - room.lastActivity;
+        
+        // Room is empty and inactive for 5+ minutes
+        if (room.users.size === 0 && timeSinceLastActivity >= CLEANUP_INTERVAL) {
+            if (roomId === 'public') {
+                // FIXED: Clear public room messages but don't delete room
+                if (room.messages.length > 0) {
+                    room.messages = [];
+                    room.lastActivity = now;
+                    publicRoomCleared = true;
+                    console.log('🧹 Auto-cleared public room messages (empty for 5+ minutes)');
+                }
+            } else {
+                // Delete private rooms
                 roomsToDelete.push(roomId);
-                console.log(`🗑️ Auto-deleted room: ${room.name}`);
+                console.log(`🗑️ Auto-deleted room: ${room.name} (empty for 5+ minutes)`);
             }
         }
     });
     
+    // Remove deleted rooms
     roomsToDelete.forEach(roomId => rooms.delete(roomId));
-    if (roomsToDelete.length > 0) {
+    
+    // Save changes if anything was modified
+    if (roomsToDelete.length > 0 || publicRoomCleared) {
         saveRooms();
         io.emit('roomsList', getRoomsList());
+        
+        // Notify if public room was cleared
+        if (publicRoomCleared) {
+            io.to('public').emit('chatCleared', { 
+                message: 'Public chat cleared due to 5 minutes of inactivity' 
+            });
+        }
     }
-}, 30 * 1000);
+}
+
+// Run cleanup every 30 seconds (checks for 5+ minute inactivity)
+setInterval(cleanupInactiveRooms, 30 * 1000);
 
 // Get Indian time
 function getIndianTime() {
@@ -171,6 +196,7 @@ io.on('connection', (socket) => {
             if (currentRoom) {
                 currentRoom.users.delete(socket.id);
                 socket.leave(user.currentRoom);
+                currentRoom.lastActivity = Date.now();
             }
         }
 
@@ -229,7 +255,6 @@ io.on('connection', (socket) => {
         io.to(user.currentRoom).emit('message', message);
     });
 
-    // NEW: Clear chat (only room owner)
     socket.on('clearChat', (data) => {
         const user = users.get(socket.id);
         if (!user || !user.currentRoom) return;
@@ -251,6 +276,7 @@ io.on('connection', (socket) => {
         
         // Clear messages
         room.messages = [];
+        room.lastActivity = Date.now();
         saveRooms();
         
         // Notify all users in room
@@ -261,7 +287,6 @@ io.on('connection', (socket) => {
         console.log(`Chat cleared in ${room.name} by ${user.nickname}`);
     });
 
-    // NEW: Close room (only room owner)
     socket.on('closeRoom', (data) => {
         const user = users.get(socket.id);
         if (!user || !user.currentRoom) return;
@@ -350,4 +375,5 @@ server.listen(PORT, () => {
     console.log(`🇮🇳 Using Indian Standard Time`);
     console.log(`🧹 Auto-cleanup: 5 minutes for empty rooms`);
     console.log(`🔒 Owner controls: Close room & Clear chat with password`);
+    console.log(`💬 Public room: Messages auto-clear after 5 min of inactivity`);
 });
