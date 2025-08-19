@@ -356,7 +356,7 @@
             background: var(--container-bg);
             padding: 30px;
             border-radius: 15px;
-            min-width: 350px;
+            min-width: 400px;
             max-width: 90%;
             box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
             text-align: center;
@@ -370,7 +370,7 @@
 
         .custom-modal input {
             width: 100%;
-            margin-bottom: 20px;
+            margin-bottom: 15px;
             padding: 15px;
             font-size: 16px;
             border-radius: 10px;
@@ -387,6 +387,7 @@
             display: flex;
             gap: 10px;
             justify-content: center;
+            margin-top: 20px;
         }
 
         .modal-btn {
@@ -414,6 +415,28 @@
             box-shadow: 0 4px 12px rgba(0,0,0,0.3);
         }
 
+        .form-group {
+            text-align: left;
+            margin-bottom: 15px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+            color: var(--text-color);
+        }
+
+        .hint-text {
+            font-size: 12px;
+            color: #666;
+            margin-top: 5px;
+        }
+
+        [data-theme="dark"] .hint-text {
+            color: #aaa;
+        }
+
         @media (max-width: 768px) {
             .container {
                 margin: 10px;
@@ -435,7 +458,7 @@
             }
 
             .custom-modal-content {
-                min-width: 280px;
+                min-width: 300px;
                 padding: 20px;
             }
         }
@@ -515,17 +538,32 @@
         let currentRoom = null;
         let isOwner = false;
 
-        // NEW: Custom Password Modal Function
-        function showPasswordModal(title, onSubmit, onCancel) {
-            // Create modal
+        // NEW: Generic Custom Modal Function
+        function showCustomModal(config) {
             const modal = document.createElement('div');
             modal.className = 'custom-modal';
+            
+            let inputsHTML = '';
+            config.inputs.forEach((input, index) => {
+                inputsHTML += `
+                    <div class="form-group">
+                        <label for="modalInput${index}">${input.label}</label>
+                        <input type="${input.type || 'text'}" 
+                               id="modalInput${index}" 
+                               placeholder="${input.placeholder || ''}" 
+                               maxlength="${input.maxlength || ''}"
+                               ${index === 0 ? 'autofocus' : ''}>
+                        ${input.hint ? `<div class="hint-text">${input.hint}</div>` : ''}
+                    </div>
+                `;
+            });
+
             modal.innerHTML = `
                 <div class="custom-modal-content">
-                    <h2>${title}</h2>
-                    <input type="password" id="modalPasswordInput" placeholder="Enter password..." autofocus>
+                    <h2>${config.title}</h2>
+                    ${inputsHTML}
                     <div class="modal-buttons">
-                        <button class="modal-btn modal-btn-primary" id="modalSubmit">Submit</button>
+                        <button class="modal-btn modal-btn-primary" id="modalSubmit">${config.submitText || 'Submit'}</button>
                         <button class="modal-btn modal-btn-secondary" id="modalCancel">Cancel</button>
                     </div>
                 </div>
@@ -533,38 +571,55 @@
 
             document.body.appendChild(modal);
 
-            const input = document.getElementById('modalPasswordInput');
+            const inputs = config.inputs.map((_, index) => document.getElementById(`modalInput${index}`));
             const submitBtn = document.getElementById('modalSubmit');
             const cancelBtn = document.getElementById('modalCancel');
 
-            // Focus input
-            setTimeout(() => input.focus(), 100);
+            // Focus first input
+            setTimeout(() => inputs[0].focus(), 100);
 
             // Handle submit
             submitBtn.onclick = () => {
-                const password = input.value.trim();
-                if (!password) {
-                    alert('Please enter a password!');
-                    input.focus();
-                    return;
+                const values = inputs.map(input => input.value.trim());
+                
+                // Validate required fields
+                for (let i = 0; i < config.inputs.length; i++) {
+                    if (config.inputs[i].required && !values[i]) {
+                        alert(`${config.inputs[i].label} is required!`);
+                        inputs[i].focus();
+                        return;
+                    }
                 }
+                
                 closeModal();
-                if (onSubmit) onSubmit(password);
+                if (config.onSubmit) config.onSubmit(values);
             };
 
             // Handle cancel
             cancelBtn.onclick = () => {
                 closeModal();
-                if (onCancel) onCancel();
+                if (config.onCancel) config.onCancel();
             };
 
-            // Handle enter key
-            input.addEventListener('keypress', (e) => {
+            // Handle enter key on last input
+            inputs[inputs.length - 1].addEventListener('keypress', (e) => {
                 if (e.key === 'Enter') submitBtn.click();
+            });
+
+            // Handle tab navigation
+            inputs.forEach((input, index) => {
+                input.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter' && index < inputs.length - 1) {
+                        inputs[index + 1].focus();
+                    }
+                });
+            });
+
+            // Handle escape key
+            modal.addEventListener('keydown', (e) => {
                 if (e.key === 'Escape') cancelBtn.click();
             });
 
-            // Close modal function
             function closeModal() {
                 document.body.removeChild(modal);
             }
@@ -611,30 +666,65 @@
             socket.emit('setNickname', { nickname: nickname });
         }
 
-        // Create room using custom modal
+        // UPDATED: Create room with custom modal
         function createRoom() {
-            const roomName = prompt('Enter room name:');
-            if (!roomName || roomName.trim().length < 2) return;
-            
-            const password = prompt('Enter password (leave empty for public room):');
-            socket.emit('createRoom', { 
-                roomName: roomName.trim(), 
-                password: password && password.trim() ? password.trim() : null 
+            showCustomModal({
+                title: 'Create New Room',
+                inputs: [
+                    {
+                        label: 'Room Name',
+                        placeholder: 'Enter room name...',
+                        maxlength: '30',
+                        required: true
+                    },
+                    {
+                        label: 'Password (Optional)',
+                        type: 'password',
+                        placeholder: 'Leave empty for public room...',
+                        maxlength: '50',
+                        hint: 'Leave empty to create a public room'
+                    }
+                ],
+                submitText: 'Create Room',
+                onSubmit: (values) => {
+                    const [roomName, password] = values;
+                    if (roomName.length < 2) {
+                        alert('Room name must be at least 2 characters long!');
+                        return;
+                    }
+                    socket.emit('createRoom', { 
+                        roomName: roomName, 
+                        password: password || null 
+                    });
+                },
+                onCancel: () => {
+                    console.log('Room creation cancelled');
+                }
             });
         }
 
         // UPDATED: Join room with custom modal
         function joinRoom(roomId, hasPassword) {
             if (hasPassword) {
-                showPasswordModal(
-                    'Enter Room Password',
-                    (password) => {
+                showCustomModal({
+                    title: 'Enter Room Password',
+                    inputs: [
+                        {
+                            label: 'Password',
+                            type: 'password',
+                            placeholder: 'Enter room password...',
+                            required: true
+                        }
+                    ],
+                    submitText: 'Join Room',
+                    onSubmit: (values) => {
+                        const [password] = values;
                         socket.emit('joinRoom', { roomId: roomId, password: password });
                     },
-                    () => {
-                        console.log('Password entry cancelled');
+                    onCancel: () => {
+                        console.log('Join room cancelled');
                     }
-                );
+                });
             } else {
                 socket.emit('joinRoom', { roomId: roomId, password: null });
             }
@@ -652,15 +742,25 @@
             if (!confirm('⚠️ Are you sure you want to clear all messages in this room?')) return;
             
             if (currentRoom !== 'public') {
-                showPasswordModal(
-                    'Enter Room Password to Confirm',
-                    (password) => {
+                showCustomModal({
+                    title: 'Confirm Clear Chat',
+                    inputs: [
+                        {
+                            label: 'Room Password',
+                            type: 'password',
+                            placeholder: 'Enter room password to confirm...',
+                            required: true
+                        }
+                    ],
+                    submitText: 'Clear Chat',
+                    onSubmit: (values) => {
+                        const [password] = values;
                         socket.emit('clearChat', { password: password });
                     },
-                    () => {
+                    onCancel: () => {
                         console.log('Clear chat cancelled');
                     }
-                );
+                });
             } else {
                 socket.emit('clearChat', { password: null });
             }
@@ -671,15 +771,26 @@
             if (!confirm('⚠️ WARNING: This will PERMANENTLY DELETE this room and kick out all users!\n\nAre you absolutely sure?')) return;
             
             if (currentRoom !== 'public') {
-                showPasswordModal(
-                    'Enter Room Password to Confirm Deletion',
-                    (password) => {
+                showCustomModal({
+                    title: 'Confirm Room Deletion',
+                    inputs: [
+                        {
+                            label: 'Room Password',
+                            type: 'password',
+                            placeholder: 'Enter room password to confirm deletion...',
+                            required: true,
+                            hint: 'This action cannot be undone!'
+                        }
+                    ],
+                    submitText: 'Delete Room',
+                    onSubmit: (values) => {
+                        const [password] = values;
                         socket.emit('closeRoom', { password: password });
                     },
-                    () => {
+                    onCancel: () => {
                         console.log('Close room cancelled');
                     }
-                );
+                });
             } else {
                 socket.emit('closeRoom', { password: null });
             }
