@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Walkie Rooms - Anonymous Chat</title>
+    <title>Enhanced Anonymous Chat</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
         * {
@@ -82,6 +82,12 @@
             background: rgba(255,255,255,0.3);
         }
 
+        .room-controls {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
         .btn {
             padding: 8px 15px;
             border: none;
@@ -97,9 +103,29 @@
             color: white;
         }
 
+        .btn-danger {
+            background: #dc3545;
+            color: white;
+        }
+
+        .btn-warning {
+            background: #ff6b35;
+            color: white;
+        }
+
+        .btn-small {
+            padding: 4px 8px;
+            font-size: 11px;
+            border-radius: 12px;
+        }
+
         .btn:hover {
             transform: translateY(-2px);
             box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        }
+
+        .btn:active {
+            transform: translateY(0);
         }
 
         .screen {
@@ -137,41 +163,109 @@
             border-color: var(--primary-color);
         }
 
-        .auto-delete-warning {
-            background: #fff3cd;
-            border: 1px solid #ffeaa7;
-            border-radius: 10px;
-            padding: 15px;
-            margin: 20px auto;
-            max-width: 650px;
-            color: #856404;
-            text-align: left;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        .rooms-screen {
+            min-height: 500px;
         }
 
-        .warning-header {
+        .chat-screen {
+            display: none;
+            flex-direction: column;
+            height: 70vh;
+        }
+
+        .chat-screen.active {
             display: flex;
+        }
+
+        .room-info {
+            background: var(--message-bg);
+            padding: 15px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
             align-items: center;
-            gap: 10px;
-            margin-bottom: 10px;
+        }
+
+        .room-info-left {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .room-buttons {
+            display: flex;
+            gap: 8px;
+        }
+
+        .chat-box {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .message {
+            margin-bottom: 15px;
+            padding: 12px;
+            background: var(--message-bg);
+            border-radius: 12px;
+            border-left: 4px solid var(--primary-color);
+        }
+
+        .message.system {
+            background: #e8f5e8;
+            border-left-color: #4caf50;
+            color: #2e7d32;
+            text-align: center;
+            font-style: italic;
+            font-weight: 500;
+        }
+
+        .message-header {
             font-weight: bold;
-            font-size: 16px;
-        }
-
-        .warning-icon {
-            font-size: 22px;
-        }
-
-        .warning-text {
-            margin: 0;
+            color: var(--primary-color);
+            margin-bottom: 5px;
             font-size: 14px;
-            line-height: 1.5;
         }
 
-        [data-theme="dark"] .auto-delete-warning {
-            background: #4a4227;
-            border: 1px solid #6b5d33;
-            color: #f5ecb8;
+        .message-text {
+            line-height: 1.4;
+        }
+
+        .input-area {
+            display: flex;
+            padding: 20px;
+            gap: 10px;
+            background: var(--container-bg);
+        }
+
+        input, select {
+            padding: 12px;
+            border: 2px solid var(--border-color);
+            border-radius: 25px;
+            background: var(--input-bg) !important;
+            color: var(--text-color) !important;
+            font-size: 14px;
+            outline: none;
+            transition: border-color 0.3s ease;
+        }
+
+        input:focus, select:focus {
+            border-color: var(--primary-color);
+        }
+
+        #messageInput {
+            background: var(--input-bg) !important;
+            color: var(--text-color) !important;
+            border: 2px solid var(--border-color) !important;
+        }
+
+        input::placeholder {
+            color: rgba(128, 128, 128, 0.7);
+        }
+
+        [data-theme="dark"] input::placeholder {
+            color: rgba(255, 255, 255, 0.5);
         }
 
         .rooms-grid {
@@ -187,7 +281,7 @@
             border-radius: 12px;
             border: 1px solid var(--border-color);
             transition: all 0.3s ease;
-            cursor: pointer;
+            position: relative;
         }
 
         .room-card:hover {
@@ -195,9 +289,25 @@
             box-shadow: 0 6px 20px rgba(0,0,0,0.15);
         }
 
+        .room-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 15px;
+        }
+
         .room-card h3 {
             color: var(--primary-color);
-            margin-bottom: 10px;
+            cursor: pointer;
+            flex: 1;
+        }
+
+        .room-card h3:hover {
+            text-decoration: underline;
+        }
+
+        .room-close-btn {
+            margin-left: 10px;
         }
 
         .room-meta {
@@ -207,14 +317,46 @@
             color: #666;
         }
 
-        .status {
-            color: #28a745;
-            font-weight: bold;
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
         }
 
-        .error {
-            color: #dc3545;
-            font-weight: bold;
+        .modal.active {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal-content {
+            background: var(--container-bg);
+            padding: 30px;
+            border-radius: 15px;
+            width: 90%;
+            max-width: 400px;
+            text-align: center;
+        }
+
+        .form-group {
+            margin: 15px 0;
+            text-align: left;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+
+        .form-group input {
+            width: 100%;
+            margin: 0;
         }
 
         @media (max-width: 768px) {
@@ -231,6 +373,21 @@
             .rooms-grid {
                 grid-template-columns: 1fr;
             }
+
+            .room-buttons {
+                flex-direction: column;
+                gap: 5px;
+            }
+
+            .btn {
+                font-size: 12px;
+                padding: 6px 12px;
+            }
+
+            .room-card-header {
+                flex-direction: column;
+                gap: 10px;
+            }
         }
     </style>
 </head>
@@ -242,13 +399,13 @@
                 <p id="userInfo">Welcome!</p>
             </div>
             <div class="header-controls">
-                <button class="theme-toggle" id="themeToggle">☀️ Light</button>
+                <button class="theme-toggle" onclick="toggleTheme()">☀️ Light</button>
+                <div class="room-controls" id="roomControls" style="display: none;">
+                    <button class="btn btn-primary" onclick="showCreateRoomModal()">Create Room</button>
+                    <button class="btn btn-danger" id="clearRoomBtn" onclick="clearRoom()" style="display: none;">Clear Chat</button>
+                    <button class="btn btn-warning" id="closeRoomBtn" onclick="closeRoom()" style="display: none;">Close Room</button>
+                </div>
             </div>
-        </div>
-
-        <!-- Connection Status -->
-        <div id="connectionStatus" style="padding: 10px; text-align: center; display: none;">
-            <span class="status">🔄 Connecting to server...</span>
         </div>
 
         <!-- Nickname Screen -->
@@ -257,7 +414,7 @@
             <p style="margin-bottom: 30px; opacity: 0.7;">Choose a nickname to start chatting</p>
             <div class="nickname-input-container">
                 <input type="text" id="nicknameInput" placeholder="Enter your nickname..." maxlength="20">
-                <button class="btn btn-primary" id="continueBtn">Continue</button>
+                <button class="btn btn-primary" onclick="setNickname()">Continue</button>
             </div>
         </div>
 
@@ -265,108 +422,159 @@
         <div class="screen rooms-screen" id="roomsScreen">
             <h2>Choose a Room</h2>
             <p style="margin: 20px 0; opacity: 0.7;">Join an existing room or create your own</p>
-            
-            <div class="auto-delete-warning">
-                <div class="warning-header">
-                    <span class="warning-icon">⚠️</span>
-                    <span>Auto-Cleanup Policy</span>
-                </div>
-                <p class="warning-text">
-                    Private rooms are automatically deleted after being empty (0 users) for 5 minutes. 
-                    The Public Chat room only clears messages but never gets deleted.
-                </p>
-            </div>
-            
-            <div class="rooms-grid" id="roomsList">
-                <div class="room-card" onclick="joinPublicRoom()">
-                    <h3>Public Chat</h3>
-                    <div class="room-meta">
-                        <span>0 users</span>
-                        <span>🌐 Public</span>
+            <div class="rooms-grid" id="roomsList"></div>
+        </div>
+
+        <!-- Chat Screen -->
+        <div class="chat-screen" id="chatScreen">
+            <div class="room-info">
+                <div class="room-info-left">
+                    <div>
+                        <strong id="currentRoomName">Room</strong>
+                        <span id="roomUserCount">(0 users)</span>
                     </div>
                 </div>
+                <div class="room-buttons">
+                    <button class="btn btn-danger" id="clearRoomBtnChat" onclick="clearRoom()" style="display: none;">Clear Chat</button>
+                    <button class="btn btn-warning" id="closeRoomBtnChat" onclick="closeRoom()" style="display: none;">Close Room</button>
+                    <button class="btn btn-primary" onclick="leaveRoom()">Leave Room</button>
+                </div>
+            </div>
+            <div id="messages" class="chat-box"></div>
+            <div class="input-area">
+                <input type="text" id="messageInput" placeholder="Type your message..." maxlength="300" style="flex: 1;">
+                <button class="btn btn-primary" onclick="sendMessage()">Send</button>
             </div>
         </div>
     </div>
 
+    <!-- Create Room Modal -->
+    <div class="modal" id="createRoomModal">
+        <div class="modal-content">
+            <h3>Create New Room</h3>
+            <div class="form-group">
+                <label>Room Name:</label>
+                <input type="text" id="roomNameInput" placeholder="Enter room name..." maxlength="30">
+            </div>
+            <div class="form-group">
+                <label>Password (Optional):</label>
+                <input type="password" id="roomPasswordInput" placeholder="Leave empty for public room..." maxlength="50">
+            </div>
+            <br>
+            <button class="btn btn-primary" onclick="createRoom()">Create Room</button>
+            <button class="btn" onclick="hideCreateRoomModal()" style="margin-left: 10px;">Cancel</button>
+        </div>
+    </div>
+
+    <!-- Join Room Modal -->
+    <div class="modal" id="joinRoomModal">
+        <div class="modal-content">
+            <h3 id="joinRoomTitle">Join Room</h3>
+            <div class="form-group">
+                <label>Password:</label>
+                <input type="password" id="joinPasswordInput" placeholder="Enter room password...">
+            </div>
+            <br>
+            <button class="btn btn-primary" onclick="joinRoom()">Join Room</button>
+            <button class="btn" onclick="hideJoinRoomModal()" style="margin-left: 10px;">Cancel</button>
+            <div id="joinError" style="color: red; margin-top: 10px;"></div>
+        </div>
+    </div>
+
+    <!-- Close Room Modal -->
+    <div class="modal" id="closeRoomModal">
+        <div class="modal-content">
+            <h3>⚠️ Close Room</h3>
+            <p style="margin: 15px 0; color: #dc3545;">This will permanently delete the room and kick out all users!</p>
+            <div class="form-group">
+                <label>Enter Room Password to Confirm:</label>
+                <input type="password" id="closePasswordInput" placeholder="Enter room password...">
+            </div>
+            <br>
+            <button class="btn btn-danger" onclick="confirmCloseRoom()">Delete Room</button>
+            <button class="btn" onclick="hideCloseRoomModal()" style="margin-left: 10px;">Cancel</button>
+            <div id="closeError" style="color: red; margin-top: 10px;"></div>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
     <script>
-        console.log('🚀 Walkie Rooms - Script loaded');
-
-        // Global variables
-        let socket = null;
+        const socket = io();
         let currentUser = null;
-        let isConnected = false;
+        let currentRoom = null;
+        let selectedRoomId = null;
+        let roomToClose = null;
 
-        // Initialize Socket.IO connection
-        function initializeSocket() {
-            console.log('Initializing Socket.IO connection...');
+        // FIXED: Function to convert timestamps to "time ago" format with error handling
+        function getTimeAgo(timestamp) {
+            // Handle missing or invalid timestamp
+            if (!timestamp || typeof timestamp !== 'string') return "Just now";
             
-            try {
-                // Try to connect to Socket.IO
-                if (typeof io !== 'undefined') {
-                    socket = io();
-                    setupSocketEvents();
-                } else {
-                    console.error('Socket.IO not loaded');
-                    showError('Socket.IO library not loaded. Please check your internet connection.');
-                }
-            } catch (error) {
-                console.error('Error initializing socket:', error);
-                showError('Failed to connect to server');
+            // Parse timestamp (e.g., "7:16:26 AM")
+            const timeParts = timestamp.match(/(\d+):(\d+):(\d+) (AM|PM)/);
+            if (!timeParts) return "Just now"; // fallback if can't parse
+            
+            let hours = parseInt(timeParts[1], 10);
+            const minutes = parseInt(timeParts[1], 10);
+            const seconds = parseInt(timeParts, 10);
+            const ampm = timeParts;
+            
+            // Validate parsed values
+            if (isNaN(hours) || isNaN(minutes) || isNaN(seconds)) return "Just now";
+            
+            // Convert to 24-hour format
+            if (ampm === "PM" && hours !== 12) hours += 12;
+            if (ampm === "AM" && hours === 12) hours = 0;
+            
+            const now = new Date();
+            const then = new Date();
+            then.setHours(hours, minutes, seconds);
+            
+            // Handle day rollover
+            if (then > now) {
+                then.setDate(then.getDate() - 1);
             }
-        }
-
-        // Setup socket event listeners
-        function setupSocketEvents() {
-            socket.on('connect', () => {
-                console.log('✅ Connected to server');
-                isConnected = true;
-                hideConnectionStatus();
-            });
-
-            socket.on('disconnect', () => {
-                console.log('❌ Disconnected from server');
-                isConnected = false;
-                showConnectionStatus('❌ Disconnected from server');
-            });
-
-            socket.on('connect_error', (error) => {
-                console.error('Connection error:', error);
-                showError('Unable to connect to server. Please try again later.');
-            });
-
-            socket.on('nicknameSet', (data) => {
-                console.log('Nickname set:', data.nickname);
-                currentUser = data.nickname;
-                document.getElementById('userInfo').textContent = `Hello, ${data.nickname}!`;
-                showScreen('roomsScreen');
-            });
-        }
-
-        // Theme toggle function
-        function toggleTheme() {
-            console.log('Theme toggle clicked');
             
+            let diffSeconds = Math.floor((now - then) / 1000);
+            
+            // Safety checks
+            if (diffSeconds < 0 || isNaN(diffSeconds)) return "Just now";
+            if (diffSeconds < 60) return diffSeconds + "s ago";
+            if (diffSeconds < 3600) return Math.floor(diffSeconds / 60) + "m ago";
+            if (diffSeconds < 86400) return Math.floor(diffSeconds / 3600) + "h ago";
+            return Math.floor(diffSeconds / 86400) + "d ago";
+        }
+
+        // Theme management
+        function toggleTheme() {
             const body = document.body;
-            const themeBtn = document.getElementById('themeToggle');
+            const themeBtn = document.querySelector('.theme-toggle');
             
             if (body.getAttribute('data-theme') === 'dark') {
                 body.removeAttribute('data-theme');
                 themeBtn.textContent = '🌙 Dark';
                 localStorage.setItem('theme', 'light');
-                console.log('Switched to light theme');
             } else {
                 body.setAttribute('data-theme', 'dark');
                 themeBtn.textContent = '☀️ Light';
                 localStorage.setItem('theme', 'dark');
-                console.log('Switched to dark theme');
             }
         }
 
-        // Set nickname function
+        // Screen management
+        function showScreen(screenId) {
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+            document.getElementById(screenId).classList.add('active');
+            document.getElementById('chatScreen').classList.remove('active');
+        }
+
+        function showChatScreen() {
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+            document.getElementById('chatScreen').classList.add('active');
+        }
+
+        // Nickname handling
         function setNickname() {
-            console.log('Continue button clicked!');
-            
             const nicknameInput = document.getElementById('nicknameInput');
             const nickname = nicknameInput.value.trim();
             
@@ -374,144 +582,288 @@
                 alert('Nickname must be at least 2 characters long!');
                 return;
             }
-
-            if (!isConnected) {
-                showError('Not connected to server. Please wait and try again.');
-                return;
-            }
             
-            console.log('Setting nickname:', nickname);
             socket.emit('setNickname', { nickname: nickname });
         }
 
-        // Show screen function
-        function showScreen(screenId) {
-            console.log('Showing screen:', screenId);
-            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-            document.getElementById(screenId).classList.add('active');
+        // Room management
+        function showCreateRoomModal() {
+            document.getElementById('createRoomModal').classList.add('active');
         }
 
-        // Join public room
-        function joinPublicRoom() {
-            console.log('Joining public room');
-            if (socket && isConnected) {
-                socket.emit('joinRoom', { roomId: 'public', password: null });
+        function hideCreateRoomModal() {
+            document.getElementById('createRoomModal').classList.remove('active');
+            document.getElementById('roomNameInput').value = '';
+            document.getElementById('roomPasswordInput').value = '';
+        }
+
+        function createRoom() {
+            const roomName = document.getElementById('roomNameInput').value.trim();
+            const password = document.getElementById('roomPasswordInput').value.trim();
+            
+            if (roomName.length < 2) {
+                alert('Room name must be at least 2 characters long!');
+                return;
+            }
+            
+            socket.emit('createRoom', { roomName, password: password || null });
+            hideCreateRoomModal();
+        }
+
+        function showJoinRoomModal(roomId, roomName) {
+            selectedRoomId = roomId;
+            document.getElementById('joinRoomTitle').textContent = `Join: ${roomName}`;
+            document.getElementById('joinRoomModal').classList.add('active');
+            document.getElementById('joinError').textContent = '';
+        }
+
+        function hideJoinRoomModal() {
+            document.getElementById('joinRoomModal').classList.remove('active');
+            document.getElementById('joinPasswordInput').value = '';
+            selectedRoomId = null;
+        }
+
+        // FIXED: Close room modal functions
+        function showCloseRoomModal(roomId, roomName) {
+            roomToClose = roomId;
+            document.getElementById('closeRoomModal').classList.add('active');
+            document.getElementById('closeError').textContent = '';
+            document.getElementById('closePasswordInput').value = '';
+        }
+
+        function hideCloseRoomModal() {
+            document.getElementById('closeRoomModal').classList.remove('active');
+            document.getElementById('closePasswordInput').value = '';
+            roomToClose = null;
+        }
+
+        // FIXED: Function called when Delete Room button is clicked
+        function confirmCloseRoom() {
+            if (!roomToClose) {
+                alert('No room selected for deletion');
+                return;
+            }
+            
+            const password = document.getElementById('closePasswordInput').value;
+            console.log('Attempting to delete room:', roomToClose, 'with password:', password); // Debug line
+            
+            socket.emit('closeRoomFromList', { roomId: roomToClose, password });
+        }
+
+        function joinRoom() {
+            if (!selectedRoomId) return;
+            
+            const password = document.getElementById('joinPasswordInput').value;
+            socket.emit('joinRoom', { roomId: selectedRoomId, password });
+        }
+
+        function joinPublicRoom(roomId) {
+            socket.emit('joinRoom', { roomId, password: null });
+        }
+
+        function leaveRoom() {
+            currentRoom = null;
+            showScreen('roomsScreen');
+            
+            // Hide only owner-specific buttons, keep Create Room button visible
+            document.getElementById('clearRoomBtn').style.display = 'none';
+            document.getElementById('closeRoomBtn').style.display = 'none';
+            
+            // Keep room controls visible (including Create Room button)
+            document.getElementById('roomControls').style.display = 'flex';
+        }
+
+        function clearRoom() {
+            if (confirm('Are you sure you want to clear all messages in this room?')) {
+                socket.emit('clearRoom');
             }
         }
 
-        // Show error message
-        function showError(message) {
-            const statusDiv = document.getElementById('connectionStatus');
-            statusDiv.innerHTML = `<span class="error">❌ ${message}</span>`;
-            statusDiv.style.display = 'block';
+        function closeRoom() {
+            if (confirm('⚠️ WARNING: This will PERMANENTLY DELETE this room and kick out all users!\n\nAre you absolutely sure you want to close this room?')) {
+                socket.emit('closeRoom');
+            }
         }
 
-        // Show connection status
-        function showConnectionStatus(message) {
-            const statusDiv = document.getElementById('connectionStatus');
-            statusDiv.innerHTML = `<span class="status">${message}</span>`;
-            statusDiv.style.display = 'block';
+        // Messaging
+        function sendMessage() {
+            const input = document.getElementById('messageInput');
+            const message = input.value.trim();
+            
+            if (message) {
+                socket.emit('sendMessage', { message });
+                input.value = '';
+            }
         }
 
-        // Hide connection status
-        function hideConnectionStatus() {
-            document.getElementById('connectionStatus').style.display = 'none';
+        // Display message function with safe timestamp handling
+        function displayMessage(msg) {
+            const messagesDiv = document.getElementById('messages');
+            const messageDiv = document.createElement('div');
+            
+            if (msg.type === 'system') {
+                messageDiv.className = 'message system';
+                messageDiv.innerHTML = `<div class="message-text">${msg.text}</div>`;
+            } else {
+                // Use getTimeAgo with safe error handling
+                const timeAgo = getTimeAgo(msg.timestamp);
+                messageDiv.className = 'message';
+                messageDiv.innerHTML = `
+                    <div class="message-header">${msg.nickname} - ${timeAgo}</div>
+                    <div class="message-text">${msg.text}</div>
+                `;
+            }
+            
+            messagesDiv.appendChild(messageDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
         }
 
-        // Initialize when page loads
+        // Socket events
+        socket.on('connect', () => {
+            console.log('Connected to server');
+        });
+
+        socket.on('nicknameSet', (data) => {
+            currentUser = data.nickname;
+            document.getElementById('userInfo').textContent = `Hello, ${data.nickname}!`;
+            showScreen('roomsScreen');
+            
+            // Show room controls when nickname is set
+            document.getElementById('roomControls').style.display = 'flex';
+        });
+
+        socket.on('roomsList', (rooms) => {
+            const roomsList = document.getElementById('roomsList');
+            roomsList.innerHTML = '';
+            
+            rooms.forEach(room => {
+                const roomCard = document.createElement('div');
+                roomCard.className = 'room-card';
+                
+                // Create room card HTML with close button
+                let closeButtonHtml = '';
+                if (room.canClose) {
+                    closeButtonHtml = `<button class="btn btn-danger btn-small room-close-btn" onclick="showCloseRoomModal('${room.id}', '${room.name}'); event.stopPropagation();">✕</button>`;
+                }
+                
+                roomCard.innerHTML = `
+                    <div class="room-card-header">
+                        <h3 onclick="joinRoomFromCard('${room.id}', '${room.name}', ${room.hasPassword})">${room.name}</h3>
+                        ${closeButtonHtml}
+                    </div>
+                    <div class="room-meta">
+                        <span>${room.userCount} users</span>
+                        <span>${room.hasPassword ? '🔒 Private' : '🌐 Public'}</span>
+                    </div>
+                `;
+                
+                roomsList.appendChild(roomCard);
+            });
+        });
+
+        // Helper function to join room from card
+        function joinRoomFromCard(roomId, roomName, hasPassword) {
+            if (hasPassword) {
+                showJoinRoomModal(roomId, roomName);
+            } else {
+                joinPublicRoom(roomId);
+            }
+        }
+
+        socket.on('joinedRoom', (data) => {
+            currentRoom = data.roomId;
+            document.getElementById('currentRoomName').textContent = data.roomName;
+            document.getElementById('roomUserCount').textContent = `(${data.userCount} users)`;
+            
+            // Show owner controls
+            const isOwner = data.isOwner;
+            document.getElementById('clearRoomBtnChat').style.display = isOwner ? 'inline-block' : 'none';
+            document.getElementById('closeRoomBtnChat').style.display = isOwner ? 'inline-block' : 'none';
+            
+            // Clear and load messages
+            document.getElementById('messages').innerHTML = '';
+            data.messages.forEach(msg => displayMessage(msg));
+            
+            hideJoinRoomModal();
+            showChatScreen();
+        });
+
+        socket.on('message', displayMessage);
+
+        socket.on('roomCleared', () => {
+            document.getElementById('messages').innerHTML = '';
+        });
+
+        socket.on('roomClosed', (data) => {
+            alert(`🚪 ${data.message}\n\nYou will be redirected to the rooms list.`);
+            currentRoom = null;
+            showScreen('roomsScreen');
+            
+            // Make sure Create Room button is visible after room closure
+            document.getElementById('roomControls').style.display = 'flex';
+        });
+
+        // ADDED: Listen for success response from server
+        socket.on('roomClosedSuccess', (data) => {
+            alert(`✅ ${data.message}`);
+            hideCloseRoomModal();
+        });
+
+        socket.on('userCountUpdate', (count) => {
+            document.getElementById('roomUserCount').textContent = `(${count} users)`;
+        });
+
+        socket.on('joinError', (data) => {
+            document.getElementById('joinError').textContent = data.message;
+        });
+
+        // UPDATED: Listen for error response from server
+        socket.on('closeError', (data) => {
+            document.getElementById('closeError').textContent = data.message;
+            console.log('Delete room error:', data.message);
+        });
+
+        socket.on('roomCreated', (data) => {
+            socket.emit('joinRoom', { roomId: data.roomId, password: null });
+        });
+
+        // Enter key handlers
         document.addEventListener('DOMContentLoaded', function() {
-            console.log('DOM Content Loaded');
-
-            // Setup event listeners with both methods for maximum compatibility
-            const continueBtn = document.getElementById('continueBtn');
-            const themeToggle = document.getElementById('themeToggle');
             const nicknameInput = document.getElementById('nicknameInput');
-
-            // Continue button listeners
-            if (continueBtn) {
-                continueBtn.addEventListener('click', setNickname);
-                continueBtn.onclick = setNickname; // Fallback
-                console.log('Continue button event listeners added');
-            }
-
-            // Theme toggle listeners
-            if (themeToggle) {
-                themeToggle.addEventListener('click', toggleTheme);
-                themeToggle.onclick = toggleTheme; // Fallback
-                console.log('Theme toggle event listeners added');
-            }
-
-            // Enter key support
             if (nicknameInput) {
                 nicknameInput.addEventListener('keypress', (e) => {
-                    if (e.key === 'Enter') {
-                        setNickname();
-                    }
+                    if (e.key === 'Enter') setNickname();
                 });
             }
 
-            // Load saved theme
-            const savedTheme = localStorage.getItem('theme');
-            if (savedTheme === 'light') {
-                document.body.removeAttribute('data-theme');
-                document.getElementById('themeToggle').textContent = '🌙 Dark';
+            const messageInput = document.getElementById('messageInput');
+            if (messageInput) {
+                messageInput.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') sendMessage();
+                });
             }
 
-            // Show connection status
-            showConnectionStatus('🔄 Connecting to server...');
-            
-            // Initialize socket connection
-            setTimeout(() => {
-                initializeSocket();
-            }, 500);
+            const joinPasswordInput = document.getElementById('joinPasswordInput');
+            if (joinPasswordInput) {
+                joinPasswordInput.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') joinRoom();
+                });
+            }
+
+            const closePasswordInput = document.getElementById('closePasswordInput');
+            if (closePasswordInput) {
+                closePasswordInput.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') confirmCloseRoom();
+                });
+            }
         });
 
-        // Test functions to verify they're working
-        window.testContinue = function() {
-            console.log('Test Continue function works!');
-            alert('Continue button function is working!');
-        };
-
-        window.testTheme = function() {
-            console.log('Test Theme function works!');
-            alert('Theme toggle function is working!');
-        };
-
-        // Global error handler
-        window.onerror = function(msg, url, line, col, error) {
-            console.error('JavaScript Error:', {
-                message: msg,
-                source: url,
-                line: line,
-                column: col,
-                error: error
-            });
-            return false;
-        };
-
-        console.log('🎉 All functions loaded successfully');
-    </script>
-
-    <!-- Socket.IO CDN as fallback -->
-    <script>
-        // Try to load Socket.IO from your server first, then fallback to CDN
-        if (typeof io === 'undefined') {
-            console.log('Loading Socket.IO from CDN...');
-            const script = document.createElement('script');
-            script.src = 'https://cdn.socket.io/4.7.2/socket.io.min.js';
-            script.onload = function() {
-                console.log('Socket.IO loaded from CDN');
-                initializeSocket();
-            };
-            script.onerror = function() {
-                console.error('Failed to load Socket.IO from CDN');
-                showError('Unable to load chat library. Please check your internet connection.');
-            };
-            document.head.appendChild(script);
+        // Load theme preference
+        const savedTheme = localStorage.getItem('theme');
+        if (savedTheme === 'light') {
+            document.body.removeAttribute('data-theme');
+            document.querySelector('.theme-toggle').textContent = '🌙 Dark';
         }
     </script>
-    
-    <!-- Try to load from your server -->
-    <script src="/socket.io/socket.io.js" onerror="console.log('Local Socket.IO not available, using CDN')"></script>
 </body>
 </html>
