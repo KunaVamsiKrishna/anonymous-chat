@@ -18,6 +18,8 @@
             --border-color: #ddd;
             --message-bg: #f8f9fa;
             --input-bg: white;
+            --reply-color: #e3f2fd;
+            --reaction-bg: #f5f5f5;
         }
 
         [data-theme="dark"] {
@@ -28,6 +30,8 @@
             --border-color: #444;
             --message-bg: #3d3d3d;
             --input-bg: #404040;
+            --reply-color: #1e3a5f;
+            --reaction-bg: #444;
         }
 
         body {
@@ -202,6 +206,7 @@
             overflow-y: auto;
             padding: 20px;
             border-bottom: 1px solid var(--border-color);
+            position: relative;
         }
 
         .message {
@@ -210,6 +215,7 @@
             background: var(--message-bg);
             border-radius: 12px;
             border-left: 4px solid var(--primary-color);
+            position: relative;
         }
 
         .message.system {
@@ -230,6 +236,152 @@
 
         .message-text {
             line-height: 1.4;
+        }
+
+        /* NEW: Reply styles */
+        .message-reply {
+            background: var(--reply-color);
+            border-left: 3px solid var(--primary-color);
+            padding: 8px;
+            margin-bottom: 8px;
+            border-radius: 8px;
+            font-size: 12px;
+            opacity: 0.8;
+        }
+
+        .message-reply-author {
+            font-weight: bold;
+            color: var(--primary-color);
+        }
+
+        /* NEW: Reaction styles */
+        .message-reactions {
+            display: flex;
+            gap: 5px;
+            margin-top: 8px;
+            flex-wrap: wrap;
+        }
+
+        .reaction {
+            background: var(--reaction-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 15px;
+            padding: 2px 8px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .reaction:hover {
+            background: var(--primary-color);
+            color: white;
+        }
+
+        .reaction.active {
+            background: var(--primary-color);
+            color: white;
+        }
+
+        /* NEW: Reaction picker */
+        .reaction-picker {
+            position: absolute;
+            background: var(--container-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            padding: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            display: none;
+            z-index: 100;
+        }
+
+        .reaction-picker.show {
+            display: flex;
+            gap: 5px;
+        }
+
+        .reaction-emoji {
+            font-size: 20px;
+            padding: 5px;
+            border-radius: 50%;
+            cursor: pointer;
+            transition: transform 0.2s ease;
+        }
+
+        .reaction-emoji:hover {
+            transform: scale(1.3);
+            background: var(--message-bg);
+        }
+
+        /* NEW: Message actions */
+        .message-actions {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            opacity: 0;
+            transition: opacity 0.2s ease;
+        }
+
+        .message:hover .message-actions {
+            opacity: 1;
+        }
+
+        .action-btn {
+            background: var(--reaction-bg);
+            border: none;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            cursor: pointer;
+            margin-left: 5px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            transition: all 0.2s ease;
+        }
+
+        .action-btn:hover {
+            background: var(--primary-color);
+            color: white;
+            transform: scale(1.1);
+        }
+
+        /* NEW: Typing indicator */
+        .typing-indicator {
+            padding: 10px 20px;
+            font-style: italic;
+            color: #666;
+            font-size: 14px;
+        }
+
+        /* NEW: Reply bar */
+        .reply-bar {
+            background: var(--reply-color);
+            padding: 10px 20px;
+            border-top: 1px solid var(--border-color);
+            display: none;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .reply-bar.show {
+            display: flex;
+        }
+
+        .reply-info {
+            flex: 1;
+        }
+
+        .reply-cancel {
+            background: none;
+            border: none;
+            color: var(--text-color);
+            cursor: pointer;
+            font-size: 18px;
+            padding: 5px;
         }
 
         .input-area {
@@ -388,6 +540,12 @@
                 flex-direction: column;
                 gap: 10px;
             }
+
+            .message-actions {
+                position: static;
+                opacity: 1;
+                margin-top: 10px;
+            }
         }
     </style>
 </head>
@@ -441,6 +599,16 @@
                 </div>
             </div>
             <div id="messages" class="chat-box"></div>
+            <!-- NEW: Typing indicator -->
+            <div id="typingIndicator" class="typing-indicator" style="display: none;"></div>
+            <!-- NEW: Reply bar -->
+            <div id="replyBar" class="reply-bar">
+                <div class="reply-info">
+                    <div style="font-weight: bold;">Replying to <span id="replyAuthor"></span></div>
+                    <div id="replyText" style="opacity: 0.7;"></div>
+                </div>
+                <button class="reply-cancel" onclick="cancelReply()">✕</button>
+            </div>
             <div class="input-area">
                 <input type="text" id="messageInput" placeholder="Type your message..." maxlength="300" style="flex: 1;">
                 <button class="btn btn-primary" onclick="sendMessage()">Send</button>
@@ -497,6 +665,16 @@
         </div>
     </div>
 
+    <!-- NEW: Reaction Picker -->
+    <div id="reactionPicker" class="reaction-picker">
+        <span class="reaction-emoji" onclick="addReaction('❤️')">❤️</span>
+        <span class="reaction-emoji" onclick="addReaction('👍')">👍</span>
+        <span class="reaction-emoji" onclick="addReaction('😂')">😂</span>
+        <span class="reaction-emoji" onclick="addReaction('😢')">😢</span>
+        <span class="reaction-emoji" onclick="addReaction('😮')">😮</span>
+        <span class="reaction-emoji" onclick="addReaction('😡')">😡</span>
+    </div>
+
     <script src="/socket.io/socket.io.js"></script>
     <script>
         const socket = io();
@@ -504,25 +682,24 @@
         let currentRoom = null;
         let selectedRoomId = null;
         let roomToClose = null;
+        let typingTimer = null; // NEW: Typing timer
+        let replyToMessage = null; // NEW: Message being replied to
+        let currentReactionMessageId = null; // NEW: Current message for reactions
 
-        // FIXED: Function to convert timestamps to "time ago" format with error handling
+        // Function to convert timestamps to "time ago" format with error handling
         function getTimeAgo(timestamp) {
-            // Handle missing or invalid timestamp
             if (!timestamp || typeof timestamp !== 'string') return "Just now";
             
-            // Parse timestamp (e.g., "7:16:26 AM")
             const timeParts = timestamp.match(/(\d+):(\d+):(\d+) (AM|PM)/);
-            if (!timeParts) return "Just now"; // fallback if can't parse
+            if (!timeParts) return "Just now";
             
             let hours = parseInt(timeParts[1], 10);
             const minutes = parseInt(timeParts[1], 10);
             const seconds = parseInt(timeParts, 10);
             const ampm = timeParts;
             
-            // Validate parsed values
             if (isNaN(hours) || isNaN(minutes) || isNaN(seconds)) return "Just now";
             
-            // Convert to 24-hour format
             if (ampm === "PM" && hours !== 12) hours += 12;
             if (ampm === "AM" && hours === 12) hours = 0;
             
@@ -530,14 +707,12 @@
             const then = new Date();
             then.setHours(hours, minutes, seconds);
             
-            // Handle day rollover
             if (then > now) {
                 then.setDate(then.getDate() - 1);
             }
             
             let diffSeconds = Math.floor((now - then) / 1000);
             
-            // Safety checks
             if (diffSeconds < 0 || isNaN(diffSeconds)) return "Just now";
             if (diffSeconds < 60) return diffSeconds + "s ago";
             if (diffSeconds < 3600) return Math.floor(diffSeconds / 60) + "m ago";
@@ -623,7 +798,6 @@
             selectedRoomId = null;
         }
 
-        // FIXED: Close room modal functions
         function showCloseRoomModal(roomId, roomName) {
             roomToClose = roomId;
             document.getElementById('closeRoomModal').classList.add('active');
@@ -637,7 +811,6 @@
             roomToClose = null;
         }
 
-        // FIXED: Function called when Delete Room button is clicked
         function confirmCloseRoom() {
             if (!roomToClose) {
                 alert('No room selected for deletion');
@@ -645,8 +818,6 @@
             }
             
             const password = document.getElementById('closePasswordInput').value;
-            console.log('Attempting to delete room:', roomToClose, 'with password:', password); // Debug line
-            
             socket.emit('closeRoomFromList', { roomId: roomToClose, password });
         }
 
@@ -665,11 +836,8 @@
             currentRoom = null;
             showScreen('roomsScreen');
             
-            // Hide only owner-specific buttons, keep Create Room button visible
             document.getElementById('clearRoomBtn').style.display = 'none';
             document.getElementById('closeRoomBtn').style.display = 'none';
-            
-            // Keep room controls visible (including Create Room button)
             document.getElementById('roomControls').style.display = 'flex';
         }
 
@@ -685,32 +853,136 @@
             }
         }
 
+        // NEW: Reply functionality
+        function replyToMessage(messageId, author, text) {
+            replyToMessage = { id: messageId, author, text };
+            document.getElementById('replyAuthor').textContent = author;
+            document.getElementById('replyText').textContent = text.length > 50 ? text.substring(0, 50) + '...' : text;
+            document.getElementById('replyBar').classList.add('show');
+            document.getElementById('messageInput').focus();
+        }
+
+        function cancelReply() {
+            replyToMessage = null;
+            document.getElementById('replyBar').classList.remove('show');
+        }
+
+        // NEW: Reaction functionality
+        function showReactionPicker(messageId, event) {
+            currentReactionMessageId = messageId;
+            const picker = document.getElementById('reactionPicker');
+            picker.classList.add('show');
+            picker.style.left = event.pageX + 'px';
+            picker.style.top = event.pageY + 'px';
+            
+            // Hide picker when clicking elsewhere
+            setTimeout(() => {
+                document.addEventListener('click', hideReactionPicker, { once: true });
+            }, 100);
+        }
+
+        function hideReactionPicker() {
+            document.getElementById('reactionPicker').classList.remove('show');
+            currentReactionMessageId = null;
+        }
+
+        function addReaction(emoji) {
+            if (currentReactionMessageId) {
+                socket.emit('addReaction', { messageId: currentReactionMessageId, reaction: emoji });
+                hideReactionPicker();
+            }
+        }
+
+        function toggleReaction(messageId, emoji) {
+            socket.emit('addReaction', { messageId, reaction: emoji });
+        }
+
+        // NEW: Typing functionality
+        function startTyping() {
+            socket.emit('startTyping');
+            clearTimeout(typingTimer);
+            typingTimer = setTimeout(() => {
+                socket.emit('stopTyping');
+            }, 3000);
+        }
+
+        function stopTyping() {
+            clearTimeout(typingTimer);
+            socket.emit('stopTyping');
+        }
+
         // Messaging
         function sendMessage() {
             const input = document.getElementById('messageInput');
             const message = input.value.trim();
             
             if (message) {
-                socket.emit('sendMessage', { message });
+                const messageData = { message };
+                if (replyToMessage) {
+                    messageData.replyTo = replyToMessage.id;
+                }
+                
+                socket.emit('sendMessage', messageData);
                 input.value = '';
+                cancelReply();
+                stopTyping();
             }
         }
 
-        // Display message function with safe timestamp handling
+        // Display message function with new features
         function displayMessage(msg) {
             const messagesDiv = document.getElementById('messages');
             const messageDiv = document.createElement('div');
+            messageDiv.dataset.messageId = msg.id;
             
             if (msg.type === 'system') {
                 messageDiv.className = 'message system';
                 messageDiv.innerHTML = `<div class="message-text">${msg.text}</div>`;
             } else {
-                // Use getTimeAgo with safe error handling
                 const timeAgo = getTimeAgo(msg.timestamp);
                 messageDiv.className = 'message';
+                
+                let replyHtml = '';
+                if (msg.replyTo) {
+                    // Find the original message
+                    const originalMsg = Array.from(document.querySelectorAll('.message')).find(m => 
+                        m.dataset.messageId === msg.replyTo
+                    );
+                    if (originalMsg) {
+                        const originalText = originalMsg.querySelector('.message-text').textContent;
+                        const originalAuthor = originalMsg.querySelector('.message-header').textContent.split(' - ')[0];
+                        replyHtml = `
+                            <div class="message-reply">
+                                <div class="message-reply-author">${originalAuthor}</div>
+                                <div>${originalText.length > 50 ? originalText.substring(0, 50) + '...' : originalText}</div>
+                            </div>
+                        `;
+                    }
+                }
+                
+                let reactionsHtml = '';
+                if (msg.reactions && Object.keys(msg.reactions).length > 0) {
+                    reactionsHtml = '<div class="message-reactions">';
+                    for (const [emoji, users] of Object.entries(msg.reactions)) {
+                        const isActive = users.includes(currentUser) ? 'active' : '';
+                        reactionsHtml += `
+                            <span class="reaction ${isActive}" onclick="toggleReaction('${msg.id}', '${emoji}')" title="${users.join(', ')}">
+                                ${emoji} ${users.length}
+                            </span>
+                        `;
+                    }
+                    reactionsHtml += '</div>';
+                }
+                
                 messageDiv.innerHTML = `
                     <div class="message-header">${msg.nickname} - ${timeAgo}</div>
+                    ${replyHtml}
                     <div class="message-text">${msg.text}</div>
+                    ${reactionsHtml}
+                    <div class="message-actions">
+                        <button class="action-btn" onclick="replyToMessage('${msg.id}', '${msg.nickname}', '${msg.text.replace(/'/g, '&#39;')}')" title="Reply">↩️</button>
+                        <button class="action-btn" onclick="showReactionPicker('${msg.id}', event)" title="React">😊</button>
+                    </div>
                 `;
             }
             
@@ -727,8 +999,6 @@
             currentUser = data.nickname;
             document.getElementById('userInfo').textContent = `Hello, ${data.nickname}!`;
             showScreen('roomsScreen');
-            
-            // Show room controls when nickname is set
             document.getElementById('roomControls').style.display = 'flex';
         });
 
@@ -740,7 +1010,6 @@
                 const roomCard = document.createElement('div');
                 roomCard.className = 'room-card';
                 
-                // Create room card HTML with close button
                 let closeButtonHtml = '';
                 if (room.canClose) {
                     closeButtonHtml = `<button class="btn btn-danger btn-small room-close-btn" onclick="showCloseRoomModal('${room.id}', '${room.name}'); event.stopPropagation();">✕</button>`;
@@ -761,7 +1030,6 @@
             });
         });
 
-        // Helper function to join room from card
         function joinRoomFromCard(roomId, roomName, hasPassword) {
             if (hasPassword) {
                 showJoinRoomModal(roomId, roomName);
@@ -775,12 +1043,10 @@
             document.getElementById('currentRoomName').textContent = data.roomName;
             document.getElementById('roomUserCount').textContent = `(${data.userCount} users)`;
             
-            // Show owner controls
             const isOwner = data.isOwner;
             document.getElementById('clearRoomBtnChat').style.display = isOwner ? 'inline-block' : 'none';
             document.getElementById('closeRoomBtnChat').style.display = isOwner ? 'inline-block' : 'none';
             
-            // Clear and load messages
             document.getElementById('messages').innerHTML = '';
             data.messages.forEach(msg => displayMessage(msg));
             
@@ -790,6 +1056,76 @@
 
         socket.on('message', displayMessage);
 
+        // NEW: Typing indicator events
+        socket.on('userStartedTyping', (data) => {
+            const indicator = document.getElementById('typingIndicator');
+            let currentText = indicator.textContent;
+            
+            if (!currentText.includes(data.nickname)) {
+                if (currentText) {
+                    indicator.textContent = currentText + `, ${data.nickname} is typing...`;
+                } else {
+                    indicator.textContent = `${data.nickname} is typing...`;
+                }
+                indicator.style.display = 'block';
+            }
+        });
+
+        socket.on('userStoppedTyping', (data) => {
+            const indicator = document.getElementById('typingIndicator');
+            let currentText = indicator.textContent;
+            
+            if (currentText.includes(data.nickname)) {
+                currentText = currentText.replace(new RegExp(`,?\\s*${data.nickname} is typing\\.\\.\\.`, 'g'), '');
+                currentText = currentText.replace(/^,\s*/, '');
+                
+                if (currentText.trim()) {
+                    indicator.textContent = currentText;
+                } else {
+                    indicator.textContent = '';
+                    indicator.style.display = 'none';
+                }
+            }
+        });
+
+        // NEW: Reaction events
+        socket.on('reactionAdded', (data) => {
+            const messageElement = document.querySelector(`[data-message-id="${data.messageId}"]`);
+            if (messageElement) {
+                updateMessageReactions(messageElement, data.reactions);
+            }
+        });
+
+        socket.on('reactionRemoved', (data) => {
+            const messageElement = document.querySelector(`[data-message-id="${data.messageId}"]`);
+            if (messageElement) {
+                updateMessageReactions(messageElement, data.reactions);
+            }
+        });
+
+        function updateMessageReactions(messageElement, reactions) {
+            let existingReactions = messageElement.querySelector('.message-reactions');
+            if (existingReactions) {
+                existingReactions.remove();
+            }
+            
+            if (reactions && Object.keys(reactions).length > 0) {
+                let reactionsHtml = '<div class="message-reactions">';
+                for (const [emoji, users] of Object.entries(reactions)) {
+                    const isActive = users.includes(currentUser) ? 'active' : '';
+                    reactionsHtml += `
+                        <span class="reaction ${isActive}" onclick="toggleReaction('${messageElement.dataset.messageId}', '${emoji}')" title="${users.join(', ')}">
+                            ${emoji} ${users.length}
+                        </span>
+                    `;
+                }
+                reactionsHtml += '</div>';
+                
+                const messageText = messageElement.querySelector('.message-text');
+                messageText.insertAdjacentHTML('afterend', reactionsHtml);
+            }
+        }
+
         socket.on('roomCleared', () => {
             document.getElementById('messages').innerHTML = '';
         });
@@ -798,12 +1134,9 @@
             alert(`🚪 ${data.message}\n\nYou will be redirected to the rooms list.`);
             currentRoom = null;
             showScreen('roomsScreen');
-            
-            // Make sure Create Room button is visible after room closure
             document.getElementById('roomControls').style.display = 'flex';
         });
 
-        // ADDED: Listen for success response from server
         socket.on('roomClosedSuccess', (data) => {
             alert(`✅ ${data.message}`);
             hideCloseRoomModal();
@@ -817,10 +1150,8 @@
             document.getElementById('joinError').textContent = data.message;
         });
 
-        // UPDATED: Listen for error response from server
         socket.on('closeError', (data) => {
             document.getElementById('closeError').textContent = data.message;
-            console.log('Delete room error:', data.message);
         });
 
         socket.on('roomCreated', (data) => {
@@ -841,6 +1172,10 @@
                 messageInput.addEventListener('keypress', (e) => {
                     if (e.key === 'Enter') sendMessage();
                 });
+                
+                // NEW: Typing indicators
+                messageInput.addEventListener('input', startTyping);
+                messageInput.addEventListener('blur', stopTyping);
             }
 
             const joinPasswordInput = document.getElementById('joinPasswordInput');
