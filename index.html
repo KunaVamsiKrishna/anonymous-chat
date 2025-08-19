@@ -171,6 +171,44 @@
             min-height: 500px;
         }
 
+        /* NEW: Auto-delete warning styles */
+        .auto-delete-warning {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 10px;
+            padding: 15px;
+            margin: 20px auto;
+            max-width: 650px;
+            color: #856404;
+            text-align: left;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .warning-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+            font-weight: bold;
+            font-size: 16px;
+        }
+
+        .warning-icon {
+            font-size: 22px;
+        }
+
+        .warning-text {
+            margin: 0;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        [data-theme="dark"] .auto-delete-warning {
+            background: #4a4227;
+            border: 1px solid #6b5d33;
+            color: #f5ecb8;
+        }
+
         .chat-screen {
             display: none;
             flex-direction: column;
@@ -540,6 +578,24 @@
                 opacity: 1;
                 margin-top: 10px;
             }
+
+            /* NEW: Mobile responsive warning */
+            .auto-delete-warning {
+                margin: 15px 10px;
+                padding: 12px;
+            }
+            
+            .warning-header {
+                font-size: 14px;
+            }
+            
+            .warning-icon {
+                font-size: 18px;
+            }
+            
+            .warning-text {
+                font-size: 13px;
+            }
         }
     </style>
 </head>
@@ -574,6 +630,19 @@
         <div class="screen rooms-screen" id="roomsScreen">
             <h2>Choose a Room</h2>
             <p style="margin: 20px 0; opacity: 0.7;">Join an existing room or create your own</p>
+            
+            <!-- NEW: Auto-delete warning -->
+            <div class="auto-delete-warning">
+                <div class="warning-header">
+                    <span class="warning-icon">⚠️</span>
+                    <span>Auto-Cleanup Policy</span>
+                </div>
+                <p class="warning-text">
+                    Private rooms are automatically deleted after being empty (0 users) for 5 minutes. 
+                    The Public Chat room only clears messages but never gets deleted.
+                </p>
+            </div>
+            
             <div class="rooms-grid" id="roomsList"></div>
         </div>
 
@@ -678,7 +747,7 @@
         let replyToMessage = null;
         let currentReactionMessageId = null;
 
-        // UPDATED: Simple function to show exact timestamp (no "time ago")
+        // Simple function to show exact timestamp (no "time ago")
         function getTimeAgo(timestamp) {
             return timestamp;
         }
@@ -901,7 +970,7 @@
                 messageDiv.className = 'message system';
                 messageDiv.innerHTML = `<div class="message-text">${msg.text}</div>`;
             } else {
-                const timeString = getTimeAgo(msg.timestamp); // Shows exact time like "3:20:15 PM"
+                const timeString = getTimeAgo(msg.timestamp);
                 messageDiv.className = 'message';
                 
                 let replyHtml = '';
