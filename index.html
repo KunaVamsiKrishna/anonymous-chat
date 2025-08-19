@@ -128,7 +128,6 @@
             transform: translateY(0);
         }
 
-        /* Screens */
         .screen {
             display: none;
             padding: 30px;
@@ -213,7 +212,6 @@
             border-left: 4px solid var(--primary-color);
         }
 
-        /* GREEN system messages */
         .message.system {
             background: #e8f5e8;
             border-left-color: #4caf50;
@@ -241,7 +239,6 @@
             background: var(--container-bg);
         }
 
-        /* FIXED: Input field styling */
         input, select {
             padding: 12px;
             border: 2px solid var(--border-color);
@@ -257,14 +254,12 @@
             border-color: var(--primary-color);
         }
 
-        /* Specific fix for message input */
         #messageInput {
             background: var(--input-bg) !important;
             color: var(--text-color) !important;
             border: 2px solid var(--border-color) !important;
         }
 
-        /* Placeholder text styling */
         input::placeholder {
             color: rgba(128, 128, 128, 0.7);
         }
@@ -510,34 +505,44 @@
         let selectedRoomId = null;
         let roomToClose = null;
 
-        // NEW: Function to convert timestamps to "time ago" format
+        // FIXED: Function to convert timestamps to "time ago" format with error handling
         function getTimeAgo(timestamp) {
-            const now = new Date();
-            const then = new Date();
+            // Handle missing or invalid timestamp
+            if (!timestamp || typeof timestamp !== 'string') return "Just now";
             
             // Parse timestamp (e.g., "7:16:26 AM")
             const timeParts = timestamp.match(/(\d+):(\d+):(\d+) (AM|PM)/);
-            if (!timeParts) return timestamp; // fallback to original
+            if (!timeParts) return "Just now"; // fallback if can't parse
             
             let hours = parseInt(timeParts[1], 10);
-            const minutes = parseInt(timeParts[12], 10);
-            const seconds = parseInt(timeParts[13], 10);
-            const ampm = timeParts[14];
+            const minutes = parseInt(timeParts[1], 10);
+            const seconds = parseInt(timeParts[2], 10);
+            const ampm = timeParts[3];
+            
+            // Validate parsed values
+            if (isNaN(hours) || isNaN(minutes) || isNaN(seconds)) return "Just now";
             
             // Convert to 24-hour format
             if (ampm === "PM" && hours !== 12) hours += 12;
             if (ampm === "AM" && hours === 12) hours = 0;
             
+            const now = new Date();
+            const then = new Date();
             then.setHours(hours, minutes, seconds);
             
-            let diffSeconds = Math.floor((now - then) / 1000);
-            if (diffSeconds < 0) diffSeconds += 24 * 3600; // Handle day rollover
+            // Handle day rollover
+            if (then > now) {
+                then.setDate(then.getDate() - 1);
+            }
             
-            // Convert to human-readable format
+            let diffSeconds = Math.floor((now - then) / 1000);
+            
+            // Safety checks
+            if (diffSeconds < 0 || isNaN(diffSeconds)) return "Just now";
             if (diffSeconds < 60) return diffSeconds + "s ago";
-            else if (diffSeconds < 3600) return Math.floor(diffSeconds / 60) + "m ago";
-            else if (diffSeconds < 86400) return Math.floor(diffSeconds / 3600) + "h ago";
-            else return Math.floor(diffSeconds / 86400) + "d ago";
+            if (diffSeconds < 3600) return Math.floor(diffSeconds / 60) + "m ago";
+            if (diffSeconds < 86400) return Math.floor(diffSeconds / 3600) + "h ago";
+            return Math.floor(diffSeconds / 86400) + "d ago";
         }
 
         // Theme management
@@ -650,7 +655,6 @@
             socket.emit('joinRoom', { roomId, password: null });
         }
 
-        // FIXED: Leave room function - keep Create Room button visible
         function leaveRoom() {
             currentRoom = null;
             showScreen('roomsScreen');
@@ -669,7 +673,6 @@
             }
         }
 
-        // Close room from inside chat
         function closeRoom() {
             if (confirm('⚠️ WARNING: This will PERMANENTLY DELETE this room and kick out all users!\n\nAre you absolutely sure you want to close this room?')) {
                 socket.emit('closeRoom');
@@ -687,7 +690,7 @@
             }
         }
 
-        // UPDATED: Display message function with "time ago" feature
+        // FIXED: Display message function with safe timestamp handling
         function displayMessage(msg) {
             const messagesDiv = document.getElementById('messages');
             const messageDiv = document.createElement('div');
@@ -696,7 +699,7 @@
                 messageDiv.className = 'message system';
                 messageDiv.innerHTML = `<div class="message-text">${msg.text}</div>`;
             } else {
-                // Use getTimeAgo instead of raw timestamp
+                // Use getTimeAgo with safe error handling
                 const timeAgo = getTimeAgo(msg.timestamp);
                 messageDiv.className = 'message';
                 messageDiv.innerHTML = `
