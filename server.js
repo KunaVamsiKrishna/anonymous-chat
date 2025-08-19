@@ -18,7 +18,7 @@ let rooms = new Map();
 const users = new Map();
 const roomTimers = new Map();
 
-// ADDED: Load rooms from file on startup
+// Load rooms from file on startup
 function loadRoomsFromFile() {
     try {
         if (fs.existsSync(DATA_FILE)) {
@@ -40,13 +40,12 @@ function loadRoomsFromFile() {
         initializeDefaultRoom();
     }
     
-    // Ensure public room exists
     if (!rooms.has('public')) {
         initializeDefaultRoom();
     }
 }
 
-// ADDED: Save rooms to file
+// Save rooms to file
 function saveRoomsToFile() {
     try {
         const roomsData = Array.from(rooms.entries()).map(([id, room]) => ({
@@ -60,7 +59,6 @@ function saveRoomsToFile() {
         
         const data = { rooms: roomsData };
         fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
-        console.log(`💾 Saved ${roomsData.length} rooms to storage`);
     } catch (error) {
         console.error('❌ Error saving rooms:', error);
     }
@@ -78,10 +76,8 @@ function initializeDefaultRoom() {
     });
 }
 
-// Load rooms on startup
 loadRoomsFromFile();
 
-// Auto-cleanup configuration
 const CLEANUP_INTERVAL = 5 * 60 * 1000; // 5 minutes
 const CHECK_INTERVAL = 30 * 1000; // 30 seconds
 
@@ -99,7 +95,6 @@ function getRoomInfo(roomId) {
     };
 }
 
-// UPDATED: Auto-cleanup function - only clear when room is empty
 function cleanupInactiveRooms() {
     const now = Date.now();
     const roomsToDelete = [];
@@ -107,21 +102,17 @@ function cleanupInactiveRooms() {
     rooms.forEach((room, roomId) => {
         const timeSinceLastActivity = now - room.lastActivity;
         
-        // Only cleanup if room has been empty (0 users) for 5+ minutes
         if (room.users.size === 0 && timeSinceLastActivity >= CLEANUP_INTERVAL) {
             if (roomId === 'public') {
-                // Clear public room messages only
                 room.messages = [];
                 console.log('🧹 Auto-cleared public room messages (empty for 5 minutes)');
             } else {
-                // Delete empty private rooms
                 roomsToDelete.push(roomId);
                 console.log(`🗑️ Auto-deleted empty room: ${room.name} (empty for 5 minutes)`);
             }
         }
     });
     
-    // Delete empty private rooms
     roomsToDelete.forEach(roomId => {
         rooms.delete(roomId);
         if (roomTimers.has(roomId)) {
@@ -130,14 +121,12 @@ function cleanupInactiveRooms() {
         }
     });
     
-    // Save changes to file
     if (roomsToDelete.length > 0) {
         saveRoomsToFile();
         io.emit('roomsList', Array.from(rooms.keys()).map(roomId => getRoomInfo(roomId)));
     }
 }
 
-// Start auto-cleanup checker
 setInterval(cleanupInactiveRooms, CHECK_INTERVAL);
 console.log('🤖 Auto-cleanup system started (5 min empty room cleanup)');
 
@@ -145,7 +134,7 @@ function updateRoomActivity(roomId) {
     const room = rooms.get(roomId);
     if (room) {
         room.lastActivity = Date.now();
-        saveRoomsToFile(); // Save after activity
+        saveRoomsToFile();
     }
 }
 
@@ -162,7 +151,6 @@ function getIndianTime() {
 io.on('connection', (socket) => {
     console.log('User connected:', socket.id);
     
-    // Send available rooms list
     socket.emit('roomsList', Array.from(rooms.keys()).map(roomId => getRoomInfo(roomId)));
     
     socket.on('setNickname', (data) => {
@@ -190,7 +178,7 @@ io.on('connection', (socket) => {
         };
         
         rooms.set(roomId, newRoom);
-        saveRoomsToFile(); // ADDED: Save after creating room
+        saveRoomsToFile();
         
         user.isOwner = true;
         socket.emit('roomCreated', { roomId, roomName: data.roomName });
@@ -226,7 +214,7 @@ io.on('connection', (socket) => {
         socket.emit('joinedRoom', {
             roomId: data.roomId,
             roomName: room.name,
-            messages: room.messages, // Send saved messages
+            messages: room.messages,
             userCount: room.users.size,
             isOwner: room.owner === socket.id
         });
@@ -264,13 +252,131 @@ io.on('connection', (socket) => {
         }
         
         updateRoomActivity(user.currentRoom);
-        saveRoomsToFile(); // ADDED: Save after new message
         
         io.to(user.currentRoom).emit('message', message);
     });
     
-    // Rest of your socket handlers remain the same...
-    // (clearRoom, closeRoom, disconnect, etc.)
+    socket.on('clearRoom', () => {
+        const user = users.get(socket.id);
+        if (!user || !user.currentRoom) return;
+        
+        const room = rooms.get(user.currentRoom);
+        if (!room || room.owner !== socket.id) return;
+        
+        room.messages = [];
+        updateRoomActivity(user.currentRoom);
+        io.to(user.currentRoom).emit('roomCleared');
+        
+        const clearMessage = {
+            type: 'system',
+            text: `Room cleared by ${user.nickname}`,
+            timestamp: getIndianTime()
+        };
+        io.to(user.currentRoom).emit('message', clearMessage);
+    });
+    
+    // FIXED: Delete room from rooms list
+    socket.on('closeRoomFromList', (data) => {
+        console.log('Close room request:', data); // Debug line
+        
+        const user = users.get(socket.id);
+        if (!user) return;
+        
+        const room = rooms.get(data.roomId);
+        if (!room) {
+            socket.emit('closeError', { message: 'Room not found!' });
+            return;
+        }
+        
+        // Can't close public room
+        if (data.roomId === 'public') {
+            socket.emit('closeError', { message: 'Cannot close public room!' });
+            return;
+        }
+        
+        // Check if user is the owner
+        if (room.owner !== socket.id) {
+            socket.emit('closeError', { message: 'Only the room creator can delete this room!' });
+            return;
+        }
+        
+        // Verify password for private rooms
+        if (room.password && room.password !== data.password) {
+            socket.emit('closeError', { message: 'Incorrect password!' });
+            return;
+        }
+        
+        const roomName = room.name;
+        
+        // Notify users in the room
+        if (room.users.size > 0) {
+            const closeMessage = {
+                type: 'system',
+                text: `Room "${roomName}" has been closed by ${user.nickname}`,
+                timestamp: getIndianTime()
+            };
+            io.to(data.roomId).emit('message', closeMessage);
+            
+            setTimeout(() => {
+                io.to(data.roomId).emit('roomClosed', { message: `Room "${roomName}" has been closed` });
+            }, 2000);
+        }
+        
+        // Delete the room
+        rooms.delete(data.roomId);
+        if (roomTimers.has(data.roomId)) {
+            clearTimeout(roomTimers.get(data.roomId));
+            roomTimers.delete(data.roomId);
+        }
+        
+        saveRoomsToFile(); // Save changes
+        
+        // Update room list for all users
+        io.emit('roomsList', Array.from(rooms.keys()).map(roomId => getRoomInfo(roomId)));
+        
+        // Confirm to the user who deleted it
+        socket.emit('roomClosedSuccess', { message: `Room "${roomName}" deleted successfully!` });
+        
+        console.log(`Room ${roomName} deleted by ${user.nickname}`);
+    });
+    
+    socket.on('closeRoom', () => {
+        const user = users.get(socket.id);
+        if (!user || !user.currentRoom) return;
+        
+        const room = rooms.get(user.currentRoom);
+        if (!room || room.owner !== socket.id) return;
+        
+        if (user.currentRoom === 'public') {
+            socket.emit('closeError', { message: 'Cannot close public room!' });
+            return;
+        }
+        
+        const roomName = room.name;
+        const roomId = user.currentRoom;
+        
+        const closeMessage = {
+            type: 'system',
+            text: `Room "${roomName}" has been closed by ${user.nickname}`,
+            timestamp: getIndianTime()
+        };
+        io.to(roomId).emit('message', closeMessage);
+        
+        setTimeout(() => {
+            io.to(roomId).emit('roomClosed', { message: `Room "${roomName}" has been closed` });
+        }, 2000);
+        
+        rooms.delete(roomId);
+        if (roomTimers.has(roomId)) {
+            clearTimeout(roomTimers.get(roomId));
+            roomTimers.delete(roomId);
+        }
+        
+        saveRoomsToFile();
+        io.emit('roomsList', Array.from(rooms.keys()).map(roomId => getRoomInfo(roomId)));
+        
+        console.log(`Room ${roomName} closed by ${user.nickname}`);
+    });
     
     socket.on('disconnect', () => {
         const user = users.get(socket.id);
@@ -300,10 +406,9 @@ io.on('connection', (socket) => {
     });
 });
 
-// Graceful shutdown
 process.on('SIGINT', () => {
     console.log('\n🛑 Server shutting down...');
-    saveRoomsToFile(); // Save data before shutdown
+    saveRoomsToFile();
     roomTimers.forEach((timer) => clearTimeout(timer));
     server.close(() => {
         console.log('✅ Server closed gracefully');
@@ -313,7 +418,8 @@ process.on('SIGINT', () => {
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-    console.log('🚀 Walkie Rooms with Persistence running on port', PORT);
+    console.log('🚀 Walkie Rooms with Fixed Delete running on port', PORT);
     console.log('🧹 Auto-cleanup: Clears only empty rooms after 5 minutes');
     console.log('💾 Persistent storage: Rooms and messages survive restarts');
+    console.log('🗑️ Delete room: Fixed and working!');
 });
