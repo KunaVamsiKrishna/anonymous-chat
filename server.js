@@ -17,6 +17,7 @@ const DATA_FILE = path.join(__dirname, 'chat_data.json');
 let rooms = new Map();
 const users = new Map();
 const roomTimers = new Map();
+const typingUsers = new Map(); // NEW: Track typing users per room
 
 // Load rooms from file on startup
 function loadRoomsFromFile() {
@@ -203,6 +204,14 @@ io.on('connection', (socket) => {
                 currentRoom.users.delete(socket.id);
                 socket.leave(user.currentRoom);
                 updateRoomActivity(user.currentRoom);
+                
+                // NEW: Remove from typing users when leaving room
+                if (typingUsers.has(user.currentRoom)) {
+                    typingUsers.get(user.currentRoom).delete(socket.id);
+                    if (typingUsers.get(user.currentRoom).size === 0) {
+                        typingUsers.delete(user.currentRoom);
+                    }
+                }
             }
         }
         
@@ -224,7 +233,8 @@ io.on('connection', (socket) => {
         const joinMessage = {
             type: 'system',
             text: `${user.nickname} joined the room`,
-            timestamp: getIndianTime()
+            timestamp: getIndianTime(),
+            id: Date.now().toString() // NEW: Add unique ID for messages
         };
         room.messages.push(joinMessage);
         io.to(data.roomId).emit('message', joinMessage);
@@ -243,7 +253,10 @@ io.on('connection', (socket) => {
             type: 'user',
             nickname: user.nickname,
             text: data.message,
-            timestamp: getIndianTime()
+            timestamp: getIndianTime(),
+            id: Date.now().toString(), // NEW: Unique message ID
+            replyTo: data.replyTo || null, // NEW: Reply to message ID
+            reactions: {} // NEW: Store reactions
         };
         
         room.messages.push(message);
@@ -254,6 +267,96 @@ io.on('connection', (socket) => {
         updateRoomActivity(user.currentRoom);
         
         io.to(user.currentRoom).emit('message', message);
+        
+        // NEW: Remove user from typing when they send message
+        if (typingUsers.has(user.currentRoom)) {
+            typingUsers.get(user.currentRoom).delete(socket.id);
+            socket.to(user.currentRoom).emit('userStoppedTyping', { userId: socket.id, nickname: user.nickname });
+        }
+    });
+    
+    // NEW: Handle typing events
+    socket.on('startTyping', () => {
+        const user = users.get(socket.id);
+        if (!user || !user.currentRoom) return;
+        
+        if (!typingUsers.has(user.currentRoom)) {
+            typingUsers.set(user.currentRoom, new Set());
+        }
+        
+        typingUsers.get(user.currentRoom).add(socket.id);
+        socket.to(user.currentRoom).emit('userStartedTyping', { userId: socket.id, nickname: user.nickname });
+    });
+    
+    socket.on('stopTyping', () => {
+        const user = users.get(socket.id);
+        if (!user || !user.currentRoom) return;
+        
+        if (typingUsers.has(user.currentRoom)) {
+            typingUsers.get(user.currentRoom).delete(socket.id);
+            socket.to(user.currentRoom).emit('userStoppedTyping', { userId: socket.id, nickname: user.nickname });
+        }
+    });
+    
+    // NEW: Handle message reactions
+    socket.on('addReaction', (data) => {
+        const user = users.get(socket.id);
+        if (!user || !user.currentRoom) return;
+        
+        const room = rooms.get(user.currentRoom);
+        if (!room) return;
+        
+        // Find the message
+        const message = room.messages.find(msg => msg.id === data.messageId);
+        if (!message) return;
+        
+        // Initialize reactions if not exists
+        if (!message.reactions) message.reactions = {};
+        if (!message.reactions[data.reaction]) message.reactions[data.reaction] = [];
+        
+        // Add reaction if user hasn't reacted with this emoji
+        if (!message.reactions[data.reaction].includes(user.nickname)) {
+            message.reactions[data.reaction].push(user.nickname);
+            
+            // Save and broadcast
+            saveRoomsToFile();
+            io.to(user.currentRoom).emit('reactionAdded', {
+                messageId: data.messageId,
+                reaction: data.reaction,
+                user: user.nickname,
+                reactions: message.reactions
+            });
+        }
+    });
+    
+    socket.on('removeReaction', (data) => {
+        const user = users.get(socket.id);
+        if (!user || !user.currentRoom) return;
+        
+        const room = rooms.get(user.currentRoom);
+        if (!room) return;
+        
+        const message = room.messages.find(msg => msg.id === data.messageId);
+        if (!message || !message.reactions || !message.reactions[data.reaction]) return;
+        
+        // Remove user's reaction
+        const index = message.reactions[data.reaction].indexOf(user.nickname);
+        if (index > -1) {
+            message.reactions[data.reaction].splice(index, 1);
+            
+            // Remove reaction type if no users left
+            if (message.reactions[data.reaction].length === 0) {
+                delete message.reactions[data.reaction];
+            }
+            
+            saveRoomsToFile();
+            io.to(user.currentRoom).emit('reactionRemoved', {
+                messageId: data.messageId,
+                reaction: data.reaction,
+                user: user.nickname,
+                reactions: message.reactions
+            });
+        }
     });
     
     socket.on('clearRoom', () => {
@@ -270,15 +373,13 @@ io.on('connection', (socket) => {
         const clearMessage = {
             type: 'system',
             text: `Room cleared by ${user.nickname}`,
-            timestamp: getIndianTime()
+            timestamp: getIndianTime(),
+            id: Date.now().toString()
         };
         io.to(user.currentRoom).emit('message', clearMessage);
     });
     
-    // FIXED: Delete room from rooms list
     socket.on('closeRoomFromList', (data) => {
-        console.log('Close room request:', data); // Debug line
-        
         const user = users.get(socket.id);
         if (!user) return;
         
@@ -288,19 +389,16 @@ io.on('connection', (socket) => {
             return;
         }
         
-        // Can't close public room
         if (data.roomId === 'public') {
             socket.emit('closeError', { message: 'Cannot close public room!' });
             return;
         }
         
-        // Check if user is the owner
         if (room.owner !== socket.id) {
             socket.emit('closeError', { message: 'Only the room creator can delete this room!' });
             return;
         }
         
-        // Verify password for private rooms
         if (room.password && room.password !== data.password) {
             socket.emit('closeError', { message: 'Incorrect password!' });
             return;
@@ -308,12 +406,12 @@ io.on('connection', (socket) => {
         
         const roomName = room.name;
         
-        // Notify users in the room
         if (room.users.size > 0) {
             const closeMessage = {
                 type: 'system',
                 text: `Room "${roomName}" has been closed by ${user.nickname}`,
-                timestamp: getIndianTime()
+                timestamp: getIndianTime(),
+                id: Date.now().toString()
             };
             io.to(data.roomId).emit('message', closeMessage);
             
@@ -322,19 +420,11 @@ io.on('connection', (socket) => {
             }, 2000);
         }
         
-        // Delete the room
         rooms.delete(data.roomId);
-        if (roomTimers.has(data.roomId)) {
-            clearTimeout(roomTimers.get(data.roomId));
-            roomTimers.delete(data.roomId);
-        }
+        typingUsers.delete(data.roomId); // NEW: Clean up typing users
         
-        saveRoomsToFile(); // Save changes
-        
-        // Update room list for all users
+        saveRoomsToFile();
         io.emit('roomsList', Array.from(rooms.keys()).map(roomId => getRoomInfo(roomId)));
-        
-        // Confirm to the user who deleted it
         socket.emit('roomClosedSuccess', { message: `Room "${roomName}" deleted successfully!` });
         
         console.log(`Room ${roomName} deleted by ${user.nickname}`);
@@ -358,7 +448,8 @@ io.on('connection', (socket) => {
         const closeMessage = {
             type: 'system',
             text: `Room "${roomName}" has been closed by ${user.nickname}`,
-            timestamp: getIndianTime()
+            timestamp: getIndianTime(),
+            id: Date.now().toString()
         };
         io.to(roomId).emit('message', closeMessage);
         
@@ -367,11 +458,7 @@ io.on('connection', (socket) => {
         }, 2000);
         
         rooms.delete(roomId);
-        if (roomTimers.has(roomId)) {
-            clearTimeout(roomTimers.get(roomId));
-            roomTimers.delete(roomId);
-        }
-        
+        typingUsers.delete(roomId);
         saveRoomsToFile();
         io.emit('roomsList', Array.from(rooms.keys()).map(roomId => getRoomInfo(roomId)));
         
@@ -386,10 +473,17 @@ io.on('connection', (socket) => {
                 room.users.delete(socket.id);
                 updateRoomActivity(user.currentRoom);
                 
+                // NEW: Remove from typing users
+                if (typingUsers.has(user.currentRoom)) {
+                    typingUsers.get(user.currentRoom).delete(socket.id);
+                    socket.to(user.currentRoom).emit('userStoppedTyping', { userId: socket.id, nickname: user.nickname });
+                }
+                
                 const leaveMessage = {
                     type: 'system',
                     text: `${user.nickname} left the room`,
-                    timestamp: getIndianTime()
+                    timestamp: getIndianTime(),
+                    id: Date.now().toString()
                 };
                 room.messages.push(leaveMessage);
                 io.to(user.currentRoom).emit('message', leaveMessage);
@@ -397,6 +491,7 @@ io.on('connection', (socket) => {
                 
                 if (room.owner === socket.id && user.currentRoom !== 'public') {
                     rooms.delete(user.currentRoom);
+                    typingUsers.delete(user.currentRoom);
                     saveRoomsToFile();
                     io.emit('roomsList', Array.from(rooms.keys()).map(roomId => getRoomInfo(roomId)));
                 }
@@ -418,8 +513,8 @@ process.on('SIGINT', () => {
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-    console.log('🚀 Walkie Rooms with Fixed Delete running on port', PORT);
+    console.log('🚀 Walkie Rooms Enhanced running on port', PORT);
+    console.log('✨ New Features: Typing indicators, Message reactions, Reply to messages');
     console.log('🧹 Auto-cleanup: Clears only empty rooms after 5 minutes');
     console.log('💾 Persistent storage: Rooms and messages survive restarts');
-    console.log('🗑️ Delete room: Fixed and working!');
 });
