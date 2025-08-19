@@ -93,6 +93,17 @@ function updateRoomActivity(roomId) {
     }
 }
 
+// UPDATED: Function to get Indian time
+function getIndianTime() {
+    return new Date().toLocaleString("en-IN", {
+        timeZone: "Asia/Kolkata",
+        hour12: true,
+        hour: 'numeric',
+        minute: '2-digit',
+        second: '2-digit'
+    });
+}
+
 io.on('connection', (socket) => {
     console.log('User connected:', socket.id);
     
@@ -177,7 +188,7 @@ io.on('connection', (socket) => {
         const joinMessage = {
             type: 'system',
             text: `${user.nickname} joined the room`,
-            timestamp: new Date().toLocaleTimeString()
+            timestamp: getIndianTime() // UPDATED: Use Indian time
         };
         io.to(data.roomId).emit('message', joinMessage);
         
@@ -196,7 +207,7 @@ io.on('connection', (socket) => {
             type: 'user',
             nickname: user.nickname,
             text: data.message,
-            timestamp: new Date().toLocaleTimeString()
+            timestamp: getIndianTime() // UPDATED: Use Indian time
         };
         
         room.messages.push(message);
@@ -225,7 +236,7 @@ io.on('connection', (socket) => {
         const clearMessage = {
             type: 'system',
             text: `Room cleared by ${user.nickname}`,
-            timestamp: new Date().toLocaleTimeString()
+            timestamp: getIndianTime() // UPDATED: Use Indian time
         };
         io.to(user.currentRoom).emit('message', clearMessage);
     });
@@ -251,7 +262,7 @@ io.on('connection', (socket) => {
         const closeMessage = {
             type: 'system',
             text: `Room "${roomName}" has been closed by ${user.nickname}`,
-            timestamp: new Date().toLocaleTimeString()
+            timestamp: getIndianTime() // UPDATED: Use Indian time
         };
         io.to(roomId).emit('message', closeMessage);
         
@@ -301,7 +312,7 @@ io.on('connection', (socket) => {
             const closeMessage = {
                 type: 'system',
                 text: `Room "${roomName}" has been closed by ${user.nickname}`,
-                timestamp: new Date().toLocaleTimeString()
+                timestamp: getIndianTime() // UPDATED: Use Indian time
             };
             io.to(roomId).emit('message', closeMessage);
             
@@ -339,7 +350,7 @@ io.on('connection', (socket) => {
                 const leaveMessage = {
                     type: 'system',
                     text: `${user.nickname} left the room`,
-                    timestamp: new Date().toLocaleTimeString()
+                    timestamp: getIndianTime() // UPDATED: Use Indian time
                 };
                 io.to(user.currentRoom).emit('message', leaveMessage);
                 io.to(user.currentRoom).emit('userCountUpdate', room.users.size);
@@ -368,7 +379,9 @@ process.on('SIGINT', () => {
     });
 });
 
-server.listen(3000, () => {
-    console.log('🚀 Enhanced Chat App with Auto-Cleanup running on http://localhost:3000');
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => {
+    console.log('🚀 Walkie Rooms with Indian Time running on port', PORT);
     console.log('🧹 Auto-cleanup: Clears inactive rooms/messages after 5 minutes');
+    console.log('🇮🇳 Timezone: Indian Standard Time (Asia/Kolkata)');
 });
