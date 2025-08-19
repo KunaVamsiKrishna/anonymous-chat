@@ -238,7 +238,6 @@
             line-height: 1.4;
         }
 
-        /* NEW: Reply styles */
         .message-reply {
             background: var(--reply-color);
             border-left: 3px solid var(--primary-color);
@@ -254,7 +253,6 @@
             color: var(--primary-color);
         }
 
-        /* NEW: Reaction styles */
         .message-reactions {
             display: flex;
             gap: 5px;
@@ -285,7 +283,6 @@
             color: white;
         }
 
-        /* NEW: Reaction picker */
         .reaction-picker {
             position: absolute;
             background: var(--container-bg);
@@ -315,7 +312,6 @@
             background: var(--message-bg);
         }
 
-        /* NEW: Message actions */
         .message-actions {
             position: absolute;
             top: 10px;
@@ -349,7 +345,6 @@
             transform: scale(1.1);
         }
 
-        /* NEW: Typing indicator */
         .typing-indicator {
             padding: 10px 20px;
             font-style: italic;
@@ -357,7 +352,6 @@
             font-size: 14px;
         }
 
-        /* NEW: Reply bar */
         .reply-bar {
             background: var(--reply-color);
             padding: 10px 20px;
@@ -599,9 +593,7 @@
                 </div>
             </div>
             <div id="messages" class="chat-box"></div>
-            <!-- NEW: Typing indicator -->
             <div id="typingIndicator" class="typing-indicator" style="display: none;"></div>
-            <!-- NEW: Reply bar -->
             <div id="replyBar" class="reply-bar">
                 <div class="reply-info">
                     <div style="font-weight: bold;">Replying to <span id="replyAuthor"></span></div>
@@ -665,7 +657,7 @@
         </div>
     </div>
 
-    <!-- NEW: Reaction Picker -->
+    <!-- Reaction Picker -->
     <div id="reactionPicker" class="reaction-picker">
         <span class="reaction-emoji" onclick="addReaction('❤️')">❤️</span>
         <span class="reaction-emoji" onclick="addReaction('👍')">👍</span>
@@ -682,42 +674,13 @@
         let currentRoom = null;
         let selectedRoomId = null;
         let roomToClose = null;
-        let typingTimer = null; // NEW: Typing timer
-        let replyToMessage = null; // NEW: Message being replied to
-        let currentReactionMessageId = null; // NEW: Current message for reactions
+        let typingTimer = null;
+        let replyToMessage = null;
+        let currentReactionMessageId = null;
 
-        // Function to convert timestamps to "time ago" format with error handling
+        // UPDATED: Simple function to show exact timestamp (no "time ago")
         function getTimeAgo(timestamp) {
-            if (!timestamp || typeof timestamp !== 'string') return "Just now";
-            
-            const timeParts = timestamp.match(/(\d+):(\d+):(\d+) (AM|PM)/);
-            if (!timeParts) return "Just now";
-            
-            let hours = parseInt(timeParts[1], 10);
-            const minutes = parseInt(timeParts[1], 10);
-            const seconds = parseInt(timeParts, 10);
-            const ampm = timeParts;
-            
-            if (isNaN(hours) || isNaN(minutes) || isNaN(seconds)) return "Just now";
-            
-            if (ampm === "PM" && hours !== 12) hours += 12;
-            if (ampm === "AM" && hours === 12) hours = 0;
-            
-            const now = new Date();
-            const then = new Date();
-            then.setHours(hours, minutes, seconds);
-            
-            if (then > now) {
-                then.setDate(then.getDate() - 1);
-            }
-            
-            let diffSeconds = Math.floor((now - then) / 1000);
-            
-            if (diffSeconds < 0 || isNaN(diffSeconds)) return "Just now";
-            if (diffSeconds < 60) return diffSeconds + "s ago";
-            if (diffSeconds < 3600) return Math.floor(diffSeconds / 60) + "m ago";
-            if (diffSeconds < 86400) return Math.floor(diffSeconds / 3600) + "h ago";
-            return Math.floor(diffSeconds / 86400) + "d ago";
+            return timestamp;
         }
 
         // Theme management
@@ -853,7 +816,7 @@
             }
         }
 
-        // NEW: Reply functionality
+        // Reply functionality
         function replyToMessage(messageId, author, text) {
             replyToMessage = { id: messageId, author, text };
             document.getElementById('replyAuthor').textContent = author;
@@ -867,7 +830,7 @@
             document.getElementById('replyBar').classList.remove('show');
         }
 
-        // NEW: Reaction functionality
+        // Reaction functionality
         function showReactionPicker(messageId, event) {
             currentReactionMessageId = messageId;
             const picker = document.getElementById('reactionPicker');
@@ -875,7 +838,6 @@
             picker.style.left = event.pageX + 'px';
             picker.style.top = event.pageY + 'px';
             
-            // Hide picker when clicking elsewhere
             setTimeout(() => {
                 document.addEventListener('click', hideReactionPicker, { once: true });
             }, 100);
@@ -897,7 +859,7 @@
             socket.emit('addReaction', { messageId, reaction: emoji });
         }
 
-        // NEW: Typing functionality
+        // Typing functionality
         function startTyping() {
             socket.emit('startTyping');
             clearTimeout(typingTimer);
@@ -929,7 +891,7 @@
             }
         }
 
-        // Display message function with new features
+        // Display message function with exact timestamp
         function displayMessage(msg) {
             const messagesDiv = document.getElementById('messages');
             const messageDiv = document.createElement('div');
@@ -939,12 +901,11 @@
                 messageDiv.className = 'message system';
                 messageDiv.innerHTML = `<div class="message-text">${msg.text}</div>`;
             } else {
-                const timeAgo = getTimeAgo(msg.timestamp);
+                const timeString = getTimeAgo(msg.timestamp); // Shows exact time like "3:20:15 PM"
                 messageDiv.className = 'message';
                 
                 let replyHtml = '';
                 if (msg.replyTo) {
-                    // Find the original message
                     const originalMsg = Array.from(document.querySelectorAll('.message')).find(m => 
                         m.dataset.messageId === msg.replyTo
                     );
@@ -975,7 +936,7 @@
                 }
                 
                 messageDiv.innerHTML = `
-                    <div class="message-header">${msg.nickname} - ${timeAgo}</div>
+                    <div class="message-header">${msg.nickname} - ${timeString}</div>
                     ${replyHtml}
                     <div class="message-text">${msg.text}</div>
                     ${reactionsHtml}
@@ -1056,7 +1017,7 @@
 
         socket.on('message', displayMessage);
 
-        // NEW: Typing indicator events
+        // Typing indicator events
         socket.on('userStartedTyping', (data) => {
             const indicator = document.getElementById('typingIndicator');
             let currentText = indicator.textContent;
@@ -1088,7 +1049,7 @@
             }
         });
 
-        // NEW: Reaction events
+        // Reaction events
         socket.on('reactionAdded', (data) => {
             const messageElement = document.querySelector(`[data-message-id="${data.messageId}"]`);
             if (messageElement) {
@@ -1173,7 +1134,6 @@
                     if (e.key === 'Enter') sendMessage();
                 });
                 
-                // NEW: Typing indicators
                 messageInput.addEventListener('input', startTyping);
                 messageInput.addEventListener('blur', stopTyping);
             }
