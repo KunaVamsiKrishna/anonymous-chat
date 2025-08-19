@@ -171,7 +171,6 @@
             min-height: 500px;
         }
 
-        /* NEW: Auto-delete warning styles */
         .auto-delete-warning {
             background: #fff3cd;
             border: 1px solid #ffeaa7;
@@ -579,7 +578,6 @@
                 margin-top: 10px;
             }
 
-            /* NEW: Mobile responsive warning */
             .auto-delete-warning {
                 margin: 15px 10px;
                 padding: 12px;
@@ -631,7 +629,6 @@
             <h2>Choose a Room</h2>
             <p style="margin: 20px 0; opacity: 0.7;">Join an existing room or create your own</p>
             
-            <!-- NEW: Auto-delete warning -->
             <div class="auto-delete-warning">
                 <div class="warning-header">
                     <span class="warning-icon">⚠️</span>
@@ -747,9 +744,25 @@
         let replyToMessage = null;
         let currentReactionMessageId = null;
 
-        // Simple function to show exact timestamp (no "time ago")
+        // Simple function to show exact timestamp
         function getTimeAgo(timestamp) {
             return timestamp;
+        }
+
+        // FIXED: Nickname handling function - globally accessible
+        function setNickname() {
+            console.log('Continue button clicked!'); // Debug line
+            
+            const nicknameInput = document.getElementById('nicknameInput');
+            const nickname = nicknameInput.value.trim();
+            
+            if (nickname.length < 2) {
+                alert('Nickname must be at least 2 characters long!');
+                return;
+            }
+            
+            console.log('Setting nickname:', nickname); // Debug line
+            socket.emit('setNickname', { nickname: nickname });
         }
 
         // Theme management
@@ -778,19 +791,6 @@
         function showChatScreen() {
             document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
             document.getElementById('chatScreen').classList.add('active');
-        }
-
-        // Nickname handling
-        function setNickname() {
-            const nicknameInput = document.getElementById('nicknameInput');
-            const nickname = nicknameInput.value.trim();
-            
-            if (nickname.length < 2) {
-                alert('Nickname must be at least 2 characters long!');
-                return;
-            }
-            
-            socket.emit('setNickname', { nickname: nickname });
         }
 
         // Room management
@@ -1026,6 +1026,7 @@
         });
 
         socket.on('nicknameSet', (data) => {
+            console.log('Nickname set successfully:', data.nickname);
             currentUser = data.nickname;
             document.getElementById('userInfo').textContent = `Hello, ${data.nickname}!`;
             showScreen('roomsScreen');
@@ -1190,10 +1191,15 @@
 
         // Enter key handlers
         document.addEventListener('DOMContentLoaded', function() {
+            console.log('DOM loaded, setting up event handlers');
+            
             const nicknameInput = document.getElementById('nicknameInput');
             if (nicknameInput) {
                 nicknameInput.addEventListener('keypress', (e) => {
-                    if (e.key === 'Enter') setNickname();
+                    if (e.key === 'Enter') {
+                        console.log('Enter pressed in nickname input');
+                        setNickname();
+                    }
                 });
             }
 
