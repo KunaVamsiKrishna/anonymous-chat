@@ -159,6 +159,77 @@
             margin: 10px 0;
         }
 
+        /* NEW: Modal Styles for Centered Create Room Dialog */
+        .modal {
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0, 0, 0, 0.6);
+            display: none;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: #2d2d2d;
+            color: #fff;
+            border-radius: 15px;
+            padding: 30px;
+            min-width: 400px;
+            max-width: 90%;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .modal-content h2 {
+            text-align: center;
+            margin-bottom: 10px;
+            color: #4267b2;
+        }
+
+        .modal-content input {
+            margin: 5px 0;
+            padding: 12px;
+            font-size: 16px;
+            border-radius: 8px;
+            border: 2px solid #444;
+            background: #404040;
+            color: #fff;
+        }
+
+        .modal-content input:focus {
+            border-color: #4267b2;
+        }
+
+        .modal-buttons {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin-top: 10px;
+        }
+
+        .modal-buttons button {
+            margin: 0;
+            flex: 1;
+        }
+
+        .btn-cancel {
+            background: #666 !important;
+        }
+
+        .btn-cancel:hover {
+            background: #555 !important;
+        }
+
         @media (max-width: 768px) {
             .container {
                 padding: 10px;
@@ -170,6 +241,11 @@
             
             input {
                 font-size: 16px;
+            }
+
+            .modal-content {
+                min-width: 300px;
+                padding: 20px;
             }
         }
     </style>
@@ -230,6 +306,20 @@
         </div>
     </div>
 
+    <!-- NEW: Create Room Modal (Centered) -->
+    <div id="createRoomModal" class="modal">
+        <div class="modal-content">
+            <h2>Create New Room</h2>
+            <input type="text" id="newRoomName" placeholder="Room name" maxlength="30" autofocus>
+            <input type="password" id="newRoomPassword" placeholder="Password (optional)" maxlength="30">
+            <p style="font-size: 12px; opacity: 0.7; text-align: center; margin: 5px 0;">Leave password empty for a public room</p>
+            <div class="modal-buttons">
+                <button id="submitCreateRoom">Create Room</button>
+                <button class="btn-cancel" onclick="hideCreateRoomModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <script>
         const socket = io();
@@ -280,17 +370,61 @@
             socket.emit('setNickname', { nickname: nickname });
         }
 
-        // Create room
+        // UPDATED: Create room using centered modal
         function createRoom() {
-            const roomName = prompt('Enter room name:');
-            if (!roomName || roomName.trim().length < 2) return;
-            
-            const password = prompt('Enter password (leave empty for public room):');
-            socket.emit('createRoom', { 
-                roomName: roomName.trim(), 
-                password: password && password.trim() ? password.trim() : null 
-            });
+            showCreateRoomModal();
         }
+
+        function showCreateRoomModal() {
+            document.getElementById('createRoomModal').classList.add('active');
+            setTimeout(() => {
+                document.getElementById('newRoomName').focus();
+            }, 200);
+        }
+
+        function hideCreateRoomModal() {
+            document.getElementById('createRoomModal').classList.remove('active');
+            document.getElementById('newRoomName').value = '';
+            document.getElementById('newRoomPassword').value = '';
+        }
+
+        // Handle create room form submission
+        document.getElementById('submitCreateRoom').onclick = function() {
+            const roomName = document.getElementById('newRoomName').value.trim();
+            const password = document.getElementById('newRoomPassword').value.trim();
+            
+            if (roomName.length < 2) {
+                alert('Room name must be at least 2 characters long!');
+                return;
+            }
+            
+            socket.emit('createRoom', { 
+                roomName: roomName, 
+                password: password || null 
+            });
+            
+            hideCreateRoomModal();
+        };
+
+        // ESC key to close modal
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                hideCreateRoomModal();
+            }
+        });
+
+        // Enter key in modal inputs
+        document.getElementById('newRoomName').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                document.getElementById('newRoomPassword').focus();
+            }
+        });
+
+        document.getElementById('newRoomPassword').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                document.getElementById('submitCreateRoom').click();
+            }
+        });
 
         // Join room
         function joinRoom(roomId, hasPassword) {
