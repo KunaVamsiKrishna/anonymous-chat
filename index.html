@@ -338,7 +338,7 @@
             color: #aaa;
         }
 
-        /* NEW: Custom Modal Styles */
+        /* Custom Modal Styles */
         .custom-modal {
             position: fixed;
             top: 0;
@@ -437,6 +437,28 @@
             color: #aaa;
         }
 
+        /* NEW: Stealth Mode Indicator */
+        .stealth-indicator {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            background: linear-gradient(45deg, #ff6b35, #ff4757);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: bold;
+            z-index: 9999;
+            animation: pulse 2s infinite;
+            box-shadow: 0 2px 10px rgba(255, 107, 53, 0.4);
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.7; transform: scale(1.05); }
+            100% { opacity: 1; transform: scale(1); }
+        }
+
         @media (max-width: 768px) {
             .container {
                 margin: 10px;
@@ -460,6 +482,13 @@
             .custom-modal-content {
                 min-width: 300px;
                 padding: 20px;
+            }
+
+            .stealth-indicator {
+                top: 5px;
+                right: 5px;
+                font-size: 10px;
+                padding: 6px 10px;
             }
         }
     </style>
@@ -537,8 +566,9 @@
         let currentUser = null;
         let currentRoom = null;
         let isOwner = false;
+        let stealthMode = false;  // NEW: Track stealth mode
 
-        // NEW: Generic Custom Modal Function
+        // Generic Custom Modal Function
         function showCustomModal(config) {
             const modal = document.createElement('div');
             modal.className = 'custom-modal';
@@ -666,7 +696,7 @@
             socket.emit('setNickname', { nickname: nickname });
         }
 
-        // UPDATED: Create room with custom modal
+        // Create room with custom modal
         function createRoom() {
             showCustomModal({
                 title: 'Create New Room',
@@ -703,7 +733,7 @@
             });
         }
 
-        // UPDATED: Join room with custom modal
+        // Join room with custom modal
         function joinRoom(roomId, hasPassword) {
             if (hasPassword) {
                 showCustomModal({
@@ -713,7 +743,8 @@
                             label: 'Password',
                             type: 'password',
                             placeholder: 'Enter room password...',
-                            required: true
+                            required: true,
+                            hint: 'Hint: Use "gamestar94484" for stealth mode 🕵️'
                         }
                     ],
                     submitText: 'Join Room',
@@ -732,12 +763,16 @@
 
         // Leave room
         function leaveRoom() {
+            // NEW: Remove stealth indicator when leaving
+            removeStealthIndicator();
+            
             currentRoom = null;
             isOwner = false;
+            stealthMode = false;
             showScreen('roomsScreen');
         }
 
-        // UPDATED: Clear chat with custom modal
+        // Clear chat with custom modal
         function clearChat() {
             if (!confirm('⚠️ Are you sure you want to clear all messages in this room?')) return;
             
@@ -766,7 +801,7 @@
             }
         }
 
-        // UPDATED: Close room with custom modal
+        // Close room with custom modal
         function closeRoom() {
             if (!confirm('⚠️ WARNING: This will PERMANENTLY DELETE this room and kick out all users!\n\nAre you absolutely sure?')) return;
             
@@ -827,6 +862,26 @@
             messagesDiv.scrollTop = messagesDiv.scrollHeight;
         }
 
+        // NEW: Show stealth mode indicator
+        function showStealthIndicator() {
+            if (document.getElementById('stealthIndicator')) return; // Already exists
+            
+            const indicator = document.createElement('div');
+            indicator.id = 'stealthIndicator';
+            indicator.className = 'stealth-indicator';
+            indicator.textContent = '🕵️ STEALTH MODE';
+            indicator.title = 'You are in stealth mode - other users cannot see you joined';
+            document.body.appendChild(indicator);
+        }
+
+        // NEW: Remove stealth mode indicator
+        function removeStealthIndicator() {
+            const indicator = document.getElementById('stealthIndicator');
+            if (indicator) {
+                indicator.remove();
+            }
+        }
+
         // Socket events
         socket.on('connect', () => {
             console.log('Connected to server');
@@ -860,12 +915,22 @@
             });
         });
 
+        // UPDATED: Handle joined room with stealth mode
         socket.on('joinedRoom', (data) => {
             currentRoom = data.roomId;
             isOwner = data.isOwner;
+            stealthMode = data.stealthMode;  // NEW: Set stealth mode
             
             document.getElementById('currentRoomName').textContent = data.roomName;
             document.getElementById('roomUserCount').textContent = `(${data.userCount} users)`;
+            
+            // NEW: Show/hide stealth indicator
+            if (stealthMode) {
+                showStealthIndicator();
+                console.log('🕵️ Entered stealth mode');
+            } else {
+                removeStealthIndicator();
+            }
             
             // Show/hide owner buttons
             document.getElementById('clearChatBtn').style.display = isOwner ? 'inline-block' : 'none';
@@ -911,8 +976,10 @@
 
         socket.on('roomClosed', (data) => {
             alert(`🚪 ${data.message}\n\nYou will be redirected to the rooms list.`);
+            removeStealthIndicator();
             currentRoom = null;
             isOwner = false;
+            stealthMode = false;
             showScreen('roomsScreen');
         });
 
