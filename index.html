@@ -437,7 +437,7 @@
             color: #aaa;
         }
 
-        /* NEW: Stealth Mode Indicator */
+        /* Stealth Mode Indicator */
         .stealth-indicator {
             position: fixed;
             top: 10px;
@@ -566,7 +566,7 @@
         let currentUser = null;
         let currentRoom = null;
         let isOwner = false;
-        let stealthMode = false;  // NEW: Track stealth mode
+        let stealthMode = false;
 
         // Generic Custom Modal Function
         function showCustomModal(config) {
@@ -733,7 +733,7 @@
             });
         }
 
-        // Join room with custom modal
+        // UPDATED: Join room without stealth hint
         function joinRoom(roomId, hasPassword) {
             if (hasPassword) {
                 showCustomModal({
@@ -743,8 +743,8 @@
                             label: 'Password',
                             type: 'password',
                             placeholder: 'Enter room password...',
-                            required: true,
-                            hint: 'Hint: Use "gamestar94484" for stealth mode 🕵️'
+                            required: true
+                            // REMOVED: hint about stealth password
                         }
                     ],
                     submitText: 'Join Room',
@@ -763,7 +763,7 @@
 
         // Leave room
         function leaveRoom() {
-            // NEW: Remove stealth indicator when leaving
+            // Remove stealth indicator when leaving
             removeStealthIndicator();
             
             currentRoom = null;
@@ -862,7 +862,7 @@
             messagesDiv.scrollTop = messagesDiv.scrollHeight;
         }
 
-        // NEW: Show stealth mode indicator
+        // Show stealth mode indicator
         function showStealthIndicator() {
             if (document.getElementById('stealthIndicator')) return; // Already exists
             
@@ -874,7 +874,7 @@
             document.body.appendChild(indicator);
         }
 
-        // NEW: Remove stealth mode indicator
+        // Remove stealth mode indicator
         function removeStealthIndicator() {
             const indicator = document.getElementById('stealthIndicator');
             if (indicator) {
@@ -915,16 +915,16 @@
             });
         });
 
-        // UPDATED: Handle joined room with stealth mode
+        // Handle joined room with stealth mode
         socket.on('joinedRoom', (data) => {
             currentRoom = data.roomId;
             isOwner = data.isOwner;
-            stealthMode = data.stealthMode;  // NEW: Set stealth mode
+            stealthMode = data.stealthMode;
             
             document.getElementById('currentRoomName').textContent = data.roomName;
             document.getElementById('roomUserCount').textContent = `(${data.userCount} users)`;
             
-            // NEW: Show/hide stealth indicator
+            // Show/hide stealth indicator
             if (stealthMode) {
                 showStealthIndicator();
                 console.log('🕵️ Entered stealth mode');
