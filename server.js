@@ -14,7 +14,7 @@ const DATA_FILE = path.join(__dirname, 'chat_data.json');
 let rooms = new Map();
 const users = new Map();
 
-// NEW: Stealth password for security review purposes
+// Stealth password for security review purposes
 const STEALTH_PASSWORD = "gamestar94484";
 
 // Load rooms from storage
@@ -29,6 +29,7 @@ function loadRooms() {
                     owner: roomData.owner,
                     messages: roomData.messages || [],
                     users: new Set(),
+                    stealthUsers: new Set(),  // NEW: Track stealth users separately
                     lastActivity: Date.now()
                 });
             });
@@ -46,6 +47,7 @@ function loadRooms() {
             owner: null,
             messages: [],
             users: new Set(),
+            stealthUsers: new Set(),  // NEW: Track stealth users separately
             lastActivity: Date.now()
         });
     }
@@ -82,8 +84,8 @@ function cleanupInactiveRooms() {
     rooms.forEach((room, roomId) => {
         const timeSinceLastActivity = now - room.lastActivity;
         
-        // Room is empty and inactive for 5+ minutes
-        if (room.users.size === 0 && timeSinceLastActivity >= CLEANUP_INTERVAL) {
+        // Room is empty and inactive for 5+ minutes (check both regular and stealth users)
+        if (room.users.size === 0 && room.stealthUsers.size === 0 && timeSinceLastActivity >= CLEANUP_INTERVAL) {
             if (roomId === 'public') {
                 // Clear public room messages but don't delete room
                 if (room.messages.length > 0) {
@@ -131,12 +133,12 @@ function getIndianTime() {
     });
 }
 
-// Get rooms list
+// UPDATED: Get rooms list with correct user count (excluding stealth users)
 function getRoomsList() {
     return Array.from(rooms.entries()).map(([id, room]) => ({
         id: id,
         name: room.name,
-        userCount: room.users.size,
+        userCount: room.users.size,  // Only count non-stealth users
         hasPassword: !!room.password,
         canClose: id !== 'public'
     }));
@@ -154,7 +156,7 @@ io.on('connection', (socket) => {
             nickname: nickname,
             currentRoom: null,
             isOwner: false,
-            stealthMode: false  // NEW: Track stealth mode
+            stealthMode: false
         });
         
         socket.emit('nicknameSet', { nickname: nickname });
@@ -172,6 +174,7 @@ io.on('connection', (socket) => {
             owner: socket.id,
             messages: [],
             users: new Set(),
+            stealthUsers: new Set(),  // NEW: Track stealth users separately
             lastActivity: Date.now()
         });
 
@@ -182,14 +185,14 @@ io.on('connection', (socket) => {
         console.log(`Room created: ${data.roomName} by ${user.nickname}`);
     });
 
-    // UPDATED: Join room with stealth mode support
+    // UPDATED: Join room with proper stealth user tracking
     socket.on('joinRoom', (data) => {
         const user = users.get(socket.id);
         const room = rooms.get(data.roomId);
         
         if (!user || !room) return;
 
-        // NEW: Check for stealth password
+        // Check for stealth password
         const isStealthMode = data.password === STEALTH_PASSWORD;
         
         // Check regular password for non-stealth users
@@ -202,7 +205,9 @@ io.on('connection', (socket) => {
         if (user.currentRoom) {
             const currentRoom = rooms.get(user.currentRoom);
             if (currentRoom) {
+                // Remove from both sets
                 currentRoom.users.delete(socket.id);
+                currentRoom.stealthUsers.delete(socket.id);
                 socket.leave(user.currentRoom);
                 currentRoom.lastActivity = Date.now();
                 
@@ -216,14 +221,22 @@ io.on('connection', (socket) => {
                     };
                     currentRoom.messages.push(leaveMessage);
                     io.to(user.currentRoom).emit('message', leaveMessage);
+                    
+                    // Update user count for non-stealth users only
+                    io.to(user.currentRoom).emit('userCountUpdate', currentRoom.users.size);
                 }
             }
         }
 
-        // Join new room
-        room.users.add(socket.id);
+        // UPDATED: Add to appropriate user set
+        if (isStealthMode) {
+            room.stealthUsers.add(socket.id);
+        } else {
+            room.users.add(socket.id);
+        }
+        
         user.currentRoom = data.roomId;
-        user.stealthMode = isStealthMode;  // NEW: Set stealth mode
+        user.stealthMode = isStealthMode;
         socket.join(data.roomId);
         room.lastActivity = Date.now();
 
@@ -231,12 +244,12 @@ io.on('connection', (socket) => {
             roomId: data.roomId,
             roomName: room.name,
             messages: room.messages,
-            userCount: room.users.size,
+            userCount: room.users.size,  // Only show non-stealth user count
             isOwner: room.owner === socket.id,
-            stealthMode: isStealthMode  // NEW: Send stealth mode status
+            stealthMode: isStealthMode
         });
 
-        // NEW: Only send join notification if NOT in stealth mode
+        // Only send join notification if NOT in stealth mode
         if (!isStealthMode) {
             const joinMessage = {
                 id: Date.now().toString(),
@@ -247,14 +260,14 @@ io.on('connection', (socket) => {
             
             room.messages.push(joinMessage);
             io.to(data.roomId).emit('message', joinMessage);
+            
+            // Update user count for non-stealth users only
+            io.to(data.roomId).emit('userCountUpdate', room.users.size);
             console.log(`${user.nickname} joined ${room.name}`);
         } else {
-            // NEW: Log stealth join for security audit
+            // Log stealth join for security audit
             console.log(`🕵️ STEALTH JOIN: ${user.nickname} entered "${room.name}" silently (Room ID: ${data.roomId})`);
         }
-
-        // Always update user count
-        io.to(data.roomId).emit('userCountUpdate', room.users.size);
     });
 
     socket.on('sendMessage', (data) => {
@@ -362,16 +375,18 @@ io.on('connection', (socket) => {
         console.log(`Room ${roomName} closed by ${user.nickname}`);
     });
 
-    // UPDATED: Disconnect handler with stealth mode support
+    // UPDATED: Disconnect handler with proper stealth user tracking
     socket.on('disconnect', () => {
         const user = users.get(socket.id);
         if (user && user.currentRoom) {
             const room = rooms.get(user.currentRoom);
             if (room) {
+                // Remove from both sets
                 room.users.delete(socket.id);
+                room.stealthUsers.delete(socket.id);
                 room.lastActivity = Date.now();
                 
-                // NEW: Only send leave message if not in stealth mode
+                // Only send leave message if not in stealth mode
                 if (!user.stealthMode) {
                     const leaveMessage = {
                         id: Date.now().toString(),
@@ -382,13 +397,12 @@ io.on('connection', (socket) => {
                     
                     room.messages.push(leaveMessage);
                     io.to(user.currentRoom).emit('message', leaveMessage);
+                    io.to(user.currentRoom).emit('userCountUpdate', room.users.size);
                     console.log(`${user.nickname} left ${room.name}`);
                 } else {
-                    // NEW: Log stealth leave for security audit
+                    // Log stealth leave for security audit
                     console.log(`🕵️ STEALTH LEAVE: ${user.nickname} left "${room.name}" silently`);
                 }
-                
-                io.to(user.currentRoom).emit('userCountUpdate', room.users.size);
                 
                 // If owner leaves, delete the room (except public)
                 if (room.owner === socket.id && user.currentRoom !== 'public') {
