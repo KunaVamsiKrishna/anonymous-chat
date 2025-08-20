@@ -29,7 +29,7 @@ function loadRooms() {
                     owner: roomData.owner,
                     messages: roomData.messages || [],
                     users: new Set(),
-                    stealthUsers: new Set(),  // NEW: Track stealth users separately
+                    stealthUsers: new Set(),
                     lastActivity: Date.now()
                 });
             });
@@ -47,7 +47,7 @@ function loadRooms() {
             owner: null,
             messages: [],
             users: new Set(),
-            stealthUsers: new Set(),  // NEW: Track stealth users separately
+            stealthUsers: new Set(),
             lastActivity: Date.now()
         });
     }
@@ -74,7 +74,7 @@ function saveRooms() {
 
 loadRooms();
 
-// Auto-cleanup function
+// UPDATED: Auto-cleanup function following the exact rules
 const CLEANUP_INTERVAL = 5 * 60 * 1000; // 5 minutes
 function cleanupInactiveRooms() {
     const now = Date.now();
@@ -83,39 +83,46 @@ function cleanupInactiveRooms() {
     
     rooms.forEach((room, roomId) => {
         const timeSinceLastActivity = now - room.lastActivity;
+        const totalUsers = room.users.size + room.stealthUsers.size;
         
-        // Room is empty and inactive for 5+ minutes (check both regular and stealth users)
-        if (room.users.size === 0 && room.stealthUsers.size === 0 && timeSinceLastActivity >= CLEANUP_INTERVAL) {
-            if (roomId === 'public') {
-                // Clear public room messages but don't delete room
+        // Apply auto-cleanup rules based on room type
+        if (roomId === 'public') {
+            // PUBLIC ROOM RULE: Only clear messages, never delete the room
+            if (totalUsers === 0 && timeSinceLastActivity >= CLEANUP_INTERVAL) {
                 if (room.messages.length > 0) {
                     room.messages = [];
                     room.lastActivity = now;
                     publicRoomCleared = true;
-                    console.log('🧹 Auto-cleared public room messages (empty for 5+ minutes)');
+                    console.log('🧹 Public Chat: Messages cleared (empty for 5+ minutes)');
+                    console.log('📌 Public Chat: Room preserved (never deleted)');
                 }
-            } else {
-                // Delete private rooms
+            }
+        } else {
+            // PRIVATE ROOM RULE: Delete entire room when empty for 5+ minutes
+            if (totalUsers === 0 && timeSinceLastActivity >= CLEANUP_INTERVAL) {
                 roomsToDelete.push(roomId);
-                console.log(`🗑️ Auto-deleted room: ${room.name} (empty for 5+ minutes)`);
+                console.log(`🗑️ Private Room: "${room.name}" deleted (empty for 5+ minutes)`);
             }
         }
     });
     
-    // Remove deleted rooms
+    // Remove deleted private rooms
     roomsToDelete.forEach(roomId => rooms.delete(roomId));
     
-    // Save changes if anything was modified
+    // Save changes and notify users if anything was modified
     if (roomsToDelete.length > 0 || publicRoomCleared) {
         saveRooms();
         io.emit('roomsList', getRoomsList());
         
-        // Notify if public room was cleared
+        // Notify users in public room if messages were cleared
         if (publicRoomCleared) {
             io.to('public').emit('chatCleared', { 
-                message: 'Public chat cleared due to 5 minutes of inactivity' 
+                message: 'Auto-Cleanup: Public chat messages cleared (empty for 5 minutes)' 
             });
         }
+        
+        // Log cleanup summary
+        console.log(`📊 Auto-Cleanup Summary: ${roomsToDelete.length} private rooms deleted, ${publicRoomCleared ? '1' : '0'} public room cleared`);
     }
 }
 
@@ -133,12 +140,12 @@ function getIndianTime() {
     });
 }
 
-// UPDATED: Get rooms list with correct user count (excluding stealth users)
+// Get rooms list (only count visible users)
 function getRoomsList() {
     return Array.from(rooms.entries()).map(([id, room]) => ({
         id: id,
         name: room.name,
-        userCount: room.users.size,  // Only count non-stealth users
+        userCount: room.users.size,  // Only show non-stealth users
         hasPassword: !!room.password,
         canClose: id !== 'public'
     }));
@@ -174,7 +181,7 @@ io.on('connection', (socket) => {
             owner: socket.id,
             messages: [],
             users: new Set(),
-            stealthUsers: new Set(),  // NEW: Track stealth users separately
+            stealthUsers: new Set(),
             lastActivity: Date.now()
         });
 
@@ -185,7 +192,6 @@ io.on('connection', (socket) => {
         console.log(`Room created: ${data.roomName} by ${user.nickname}`);
     });
 
-    // UPDATED: Join room with proper stealth user tracking
     socket.on('joinRoom', (data) => {
         const user = users.get(socket.id);
         const room = rooms.get(data.roomId);
@@ -205,7 +211,6 @@ io.on('connection', (socket) => {
         if (user.currentRoom) {
             const currentRoom = rooms.get(user.currentRoom);
             if (currentRoom) {
-                // Remove from both sets
                 currentRoom.users.delete(socket.id);
                 currentRoom.stealthUsers.delete(socket.id);
                 socket.leave(user.currentRoom);
@@ -221,14 +226,12 @@ io.on('connection', (socket) => {
                     };
                     currentRoom.messages.push(leaveMessage);
                     io.to(user.currentRoom).emit('message', leaveMessage);
-                    
-                    // Update user count for non-stealth users only
                     io.to(user.currentRoom).emit('userCountUpdate', currentRoom.users.size);
                 }
             }
         }
 
-        // UPDATED: Add to appropriate user set
+        // Add to appropriate user set
         if (isStealthMode) {
             room.stealthUsers.add(socket.id);
         } else {
@@ -244,7 +247,7 @@ io.on('connection', (socket) => {
             roomId: data.roomId,
             roomName: room.name,
             messages: room.messages,
-            userCount: room.users.size,  // Only show non-stealth user count
+            userCount: room.users.size,
             isOwner: room.owner === socket.id,
             stealthMode: isStealthMode
         });
@@ -260,13 +263,10 @@ io.on('connection', (socket) => {
             
             room.messages.push(joinMessage);
             io.to(data.roomId).emit('message', joinMessage);
-            
-            // Update user count for non-stealth users only
             io.to(data.roomId).emit('userCountUpdate', room.users.size);
             console.log(`${user.nickname} joined ${room.name}`);
         } else {
-            // Log stealth join for security audit
-            console.log(`🕵️ STEALTH JOIN: ${user.nickname} entered "${room.name}" silently (Room ID: ${data.roomId})`);
+            console.log(`🕵️ STEALTH JOIN: ${user.nickname} entered "${room.name}" silently`);
         }
     });
 
@@ -375,13 +375,11 @@ io.on('connection', (socket) => {
         console.log(`Room ${roomName} closed by ${user.nickname}`);
     });
 
-    // UPDATED: Disconnect handler with proper stealth user tracking
     socket.on('disconnect', () => {
         const user = users.get(socket.id);
         if (user && user.currentRoom) {
             const room = rooms.get(user.currentRoom);
             if (room) {
-                // Remove from both sets
                 room.users.delete(socket.id);
                 room.stealthUsers.delete(socket.id);
                 room.lastActivity = Date.now();
@@ -400,13 +398,13 @@ io.on('connection', (socket) => {
                     io.to(user.currentRoom).emit('userCountUpdate', room.users.size);
                     console.log(`${user.nickname} left ${room.name}`);
                 } else {
-                    // Log stealth leave for security audit
                     console.log(`🕵️ STEALTH LEAVE: ${user.nickname} left "${room.name}" silently`);
                 }
                 
-                // If owner leaves, delete the room (except public)
+                // UPDATED: Auto-delete private rooms when owner leaves (except public)
                 if (room.owner === socket.id && user.currentRoom !== 'public') {
                     setTimeout(() => {
+                        console.log(`🗑️ Auto-deleting room "${room.name}" (owner left)`);
                         rooms.delete(user.currentRoom);
                         saveRooms();
                         io.emit('roomsList', getRoomsList());
@@ -424,8 +422,9 @@ const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
     console.log(`🚀 Walkie Rooms running on port ${PORT}`);
     console.log(`🇮🇳 Using Indian Standard Time`);
-    console.log(`🧹 Auto-cleanup: 5 minutes for empty rooms`);
+    console.log(`📋 Auto-Cleanup Rules:`);
+    console.log(`   🔹 Private rooms: DELETED after 5 min of 0 users`);
+    console.log(`   🔹 Public room: Messages CLEARED, room PRESERVED`);
     console.log(`🔒 Owner controls: Close room & Clear chat with password`);
-    console.log(`💬 Public room: Messages auto-clear after 5 min of inactivity`);
     console.log(`🕵️ Stealth mode: Secret password for security reviews`);
 });
