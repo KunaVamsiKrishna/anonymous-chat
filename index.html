@@ -161,9 +161,9 @@
             background: #fff3cd;
             border: 1px solid #ffeaa7;
             border-radius: 10px;
-            padding: 15px;
+            padding: 20px;
             margin: 20px auto;
-            max-width: 650px;
+            max-width: 700px;
             color: #856404;
             text-align: left;
             box-shadow: 0 2px 8px rgba(0,0,0,0.1);
@@ -173,7 +173,7 @@
             display: flex;
             align-items: center;
             gap: 10px;
-            margin-bottom: 10px;
+            margin-bottom: 12px;
             font-weight: bold;
             font-size: 16px;
         }
@@ -185,7 +185,11 @@
         .warning-text {
             margin: 0;
             font-size: 14px;
-            line-height: 1.5;
+            line-height: 1.6;
+        }
+
+        .warning-text strong {
+            font-weight: 600;
         }
 
         [data-theme="dark"] .auto-delete-warning {
@@ -490,6 +494,11 @@
                 font-size: 10px;
                 padding: 6px 10px;
             }
+
+            .auto-delete-warning {
+                margin: 15px;
+                padding: 15px;
+            }
         }
     </style>
 </head>
@@ -523,14 +532,15 @@
             <h2>Choose a Room</h2>
             <p style="margin: 20px 0; opacity: 0.7;">Join an existing room or create your own</p>
             
+            <!-- Updated Auto-Delete Warning with Precise Rules -->
             <div class="auto-delete-warning">
                 <div class="warning-header">
                     <span class="warning-icon">⚠️</span>
                     <span>Auto-Cleanup Policy</span>
                 </div>
                 <p class="warning-text">
-                    Private rooms are automatically deleted after being empty (0 users) for 5 minutes. 
-                    The Public Chat room only clears messages but never gets deleted.
+                    <strong>Private rooms:</strong> Automatically <strong>DELETED</strong> after being empty (0 users) for 5 minutes.<br><br>
+                    <strong>Public Chat room:</strong> Messages are <strong>CLEARED</strong> but the room is <strong>NEVER DELETED</strong>.
                 </p>
             </div>
             
@@ -733,7 +743,7 @@
             });
         }
 
-        // UPDATED: Join room without stealth hint
+        // Join room with custom modal (no stealth hint)
         function joinRoom(roomId, hasPassword) {
             if (hasPassword) {
                 showCustomModal({
@@ -744,7 +754,6 @@
                             type: 'password',
                             placeholder: 'Enter room password...',
                             required: true
-                            // REMOVED: hint about stealth password
                         }
                     ],
                     submitText: 'Join Room',
